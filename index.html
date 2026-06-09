@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🎯 SmartQuiz Live | Multi-Question Type Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎯 SmartQuiz Live Arena</h1>
+            <p class="subtitle">7 Question Types | Real-time Scoring | Live Leaderboard</p>
+        </header>
+
+        <!-- Auth Section -->
+        <div id="authSection" class="auth-section">
+            <div class="card">
+                <div class="flex-row">
+                    <input type="text" id="playerNameInput" placeholder="Your Name" class="input-field" style="flex:2">
+                    <input type="text" id="gamePinInput" placeholder="Game PIN" class="input-field" style="flex:1">
+                    <button id="joinGameBtn" class="btn btn-primary">👤 Join Game</button>
+                    <button id="hostGameBtn" class="btn btn-secondary">🎮 Host New Game</button>
+                </div>
+                <div id="authError" class="text-center mt-20" style="color: #f56565;"></div>
+            </div>
+        </div>
+
+        <!-- Host Panel -->
+        <div id="hostPanel" class="panel hidden">
+            <!-- Game Controls -->
+            <div class="card">
+                <div class="flex-row" style="justify-content: space-between; align-items: center;">
+                    <div>
+                        🎲 Game PIN: <strong id="hostPin" style="font-size: 1.5rem;">------</strong>
+                    </div>
+                    <div>
+                        <button id="startGameBtn" class="btn btn-success">🚀 Start Game</button>
+                        <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ Next</button>
+                        <button id="endGameBtn" class="btn btn-danger hidden">🏁 End Game</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Question Builder -->
+            <div class="card">
+                <h3>📝 Question Builder (SmartSchool Compatible)</h3>
+                <div class="flex-row" style="margin-bottom: 15px;">
+                    <select id="questionTypeSelect" class="input-field" style="flex:1">
+                        <option value="multiple_choice">Multiple Choice</option>
+                        <option value="true_false">True / False</option>
+                        <option value="fill_blank">Fill in the Blank</option>
+                        <option value="matching">Matching Pairs</option>
+                        <option value="ordering">Ordering / Sequencing</option>
+                        <option value="numeric">Numeric Answer</option>
+                    </select>
+                    <select id="difficultySelect" class="input-field" style="flex:1">
+                        <option value="easy">📘 Easy</option>
+                        <option value="medium">📙 Medium</option>
+                        <option value="hard">📕 Hard</option>
+                    </select>
+                    <select id="subjectSelect" class="input-field" style="flex:1">
+                        <option value="general">General Knowledge</option>
+                        <option value="math">Mathematics</option>
+                        <option value="science">Science</option>
+                        <option value="english">English</option>
+                        <option value="history">History</option>
+                    </select>
+                </div>
+
+                <!-- Dynamic Question Form -->
+                <div id="questionForm"></div>
+
+                <div class="flex-row mt-20">
+                    <button id="addQuestionBtn" class="btn btn-primary">➕ Add Question</button>
+                </div>
+
+                <div id="questionsList" class="mt-20" style="max-height: 300px; overflow-y: auto;"></div>
+            </div>
+
+            <!-- Live Leaderboard -->
+            <div class="card">
+                <h3>🏆 Live Leaderboard</h3>
+                <div id="hostLeaderboard" class="leaderboard">Waiting for players...</div>
+            </div>
+
+            <!-- Game Status -->
+            <div class="card">
+                <div id="hostGameStatus">📌 Game in lobby mode. Add questions and press Start!</div>
+            </div>
+        </div>
+
+        <!-- Player Panel -->
+        <div id="playerPanel" class="panel hidden">
+            <div class="card">
+                <div class="flex-row" style="justify-content: space-between;">
+                    <div>👤 <strong id="playerName"></strong></div>
+                    <div>🎲 PIN: <strong id="playerPin"></strong></div>
+                    <div>⭐ Score: <strong id="playerScore">0</strong></div>
+                </div>
+            </div>
+
+            <div id="waitingArea" class="card text-center">
+                <div style="font-size: 3rem;">⏳</div>
+                <h3>Waiting for Host to start...</h3>
+                <p>Get ready for the quiz!</p>
+            </div>
+
+            <div id="quizArea" class="hidden">
+                <div class="card">
+                    <div id="questionDisplay"></div>
+                    <div class="timer-circle" id="timerDisplay">0</div>
+                    <div id="answerFeedback" class="text-center mt-20"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    
+    <!-- Game Scripts (all in root directory, no js folder) -->
+    <script src="config.js"></script>
+    <script src="questions.js"></script>
+    <script src="game-host.js"></script>
+    <script src="game-player.js"></script>
+    <script src="auth.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
