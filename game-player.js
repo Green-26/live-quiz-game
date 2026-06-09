@@ -1,4 +1,6 @@
 // ==================== PLAYER FUNCTIONS ====================
+let hasAnsweredCurrentQuestion = false; // Track if player already answered
+
 async function joinGame() {
     const playerName = document.getElementById('playerNameInput').value.trim();
     const gamePin = document.getElementById('gamePinInput').value.trim();
@@ -17,7 +19,6 @@ async function joinGame() {
             return;
         }
         
-        // Sign in anonymously first
         const userCredential = await auth.signInAnonymously();
         const playerId = userCredential.user.uid;
         
@@ -57,12 +58,13 @@ async function attachPlayerListeners(gameRef, playerId) {
         if (data.status === 'lobby') {
             document.getElementById('waitingArea').classList.remove('hidden');
             document.getElementById('quizArea').classList.add('hidden');
+            hasAnsweredCurrentQuestion = false;
         } else if (data.status === 'active') {
             document.getElementById('waitingArea').classList.add('hidden');
             document.getElementById('quizArea').classList.remove('hidden');
         } else if (data.status === 'ended') {
             document.getElementById('quizArea').classList.add('hidden');
-            document.getElementById('answerFeedback').innerHTML = '<h3>🏆 Game Over! Thanks for playing!</h3>';
+            showGameResults(gameRef, playerId);
         }
     });
     
@@ -81,6 +83,9 @@ async function attachPlayerListeners(gameRef, playerId) {
             return;
         }
         
+        // Reset answer tracking for new question
+        hasAnsweredCurrentQuestion = false;
+        
         const question = qData.question;
         const expiresAt = qData.expiresAt.toDate();
         const questionIndex = qData.questionIndex;
@@ -89,6 +94,12 @@ async function attachPlayerListeners(gameRef, playerId) {
         document.getElementById('answerFeedback').innerHTML = '';
         
         renderPlayerQuestion(question, expiresAt, async (answer) => {
+            // Prevent multiple answers to same question
+            if (hasAnsweredCurrentQuestion) {
+                document.getElementById('answerFeedback').innerHTML = '<p style="color: #ed8936;">⚠️ You already answered this question!</p>';
+                return;
+            }
+            hasAnsweredCurrentQuestion = true;
             await submitAnswer(gameRef, playerId, answer, question, questionIndex, expiresAt);
         });
         
@@ -105,6 +116,81 @@ async function attachPlayerListeners(gameRef, playerId) {
             document.getElementById('playerScore').innerText = score;
         }
     });
+}
+
+// New function to show game results
+async function showGameResults(gameRef, playerId) {
+    try {
+        // Get all players
+        const playersSnapshot = await gameRef.collection('players').orderBy('score', 'desc').get();
+        const players = [];
+        let playerRank = 0;
+        let playerScore = 0;
+        
+        playersSnapshot.forEach((doc, index) => {
+            const playerData = doc.data();
+            players.push({
+                name: playerData.name,
+                score: playerData.score || 0
+            });
+            if (doc.id === playerId) {
+                playerRank = index + 1;
+                playerScore = playerData.score || 0;
+            }
+        });
+        
+        // Get total questions
+        const gameDoc = await gameRef.get();
+        const totalQuestions = gameDoc.data()?.questions.length || 0;
+        
+        // Create results HTML
+        let resultsHtml = `
+            <div style="text-align: center;">
+                <div style="font-size: 3rem;">🏆</div>
+                <h2>Game Over!</h2>
+                <div style="font-size: 1.5rem; margin: 20px 0;">
+                    Your Score: <strong>${playerScore}</strong> / ${totalQuestions * 100}
+                </div>
+                <div style="font-size: 1.2rem; margin: 10px 0;">
+                    Your Position: <strong>#${playerRank}</strong> of ${players.length}
+                </div>
+                <hr style="margin: 20px 0;">
+                <h3>Final Leaderboard</h3>
+                <div class="leaderboard" style="max-height: 300px; overflow-y: auto;">
+                    ${players.map((p, idx) => `
+                        <div class="leaderboard-entry ${idx === 0 ? 'top-1' : ''}" style="${idx + 1 === playerRank ? 'background: #c6f6d5; font-weight: bold;' : ''}">
+                            <span>${idx === 0 ? '👑' : `${idx + 1}.`} ${escapeHtml(p.name)}</span>
+                            <span>⭐ ${p.score} pts</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <button id="playAgainBtn" class="btn btn-primary mt-20" style="margin-top: 20px;">🔄 Play Again</button>
+            </div>
+        `;
+        
+        document.getElementById('quizArea').classList.add('hidden');
+        document.getElementById('waitingArea').classList.add('hidden');
+        
+        const playerPanel = document.getElementById('playerPanel');
+        const resultsDiv = document.createElement('div');
+        resultsDiv.className = 'card';
+        resultsDiv.id = 'gameResults';
+        resultsDiv.innerHTML = resultsHtml;
+        
+        // Remove old results if exists
+        const oldResults = document.getElementById('gameResults');
+        if (oldResults) oldResults.remove();
+        
+        playerPanel.appendChild(resultsDiv);
+        
+        // Add play again button handler
+        document.getElementById('playAgainBtn')?.addEventListener('click', () => {
+            window.location.reload();
+        });
+        
+    } catch (error) {
+        console.error('Error showing results:', error);
+    }
 }
 
 function renderPlayerQuestion(question, expiresAt, onAnswerCallback) {
@@ -131,6 +217,7 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                 opt.removeEventListener('click', handleMCClick);
                 opt.addEventListener('click', handleMCClick);
                 function handleMCClick() {
+                    if (hasAnsweredCurrentQuestion) return;
                     const answer = parseInt(opt.dataset.optIndex);
                     onAnswerCallback(answer);
                 }
@@ -142,6 +229,7 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                 opt.removeEventListener('click', handleTFClick);
                 opt.addEventListener('click', handleTFClick);
                 function handleTFClick() {
+                    if (hasAnsweredCurrentQuestion) return;
                     const answer = opt.dataset.value === 'true';
                     onAnswerCallback(answer);
                 }
@@ -154,8 +242,25 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                 submitBtn.removeEventListener('click', handleBlankSubmit);
                 submitBtn.addEventListener('click', handleBlankSubmit);
                 function handleBlankSubmit() {
+                    if (hasAnsweredCurrentQuestion) return;
                     const answer = document.getElementById('blankAnswer').value;
+                    if (!answer.trim()) {
+                        document.getElementById('answerFeedback').innerHTML = '<p style="color: #ed8936;">⚠️ Please enter an answer!</p>';
+                        return;
+                    }
                     onAnswerCallback(answer);
+                }
+            }
+            // Allow Enter key
+            const blankInput = document.getElementById('blankAnswer');
+            if (blankInput) {
+                blankInput.removeEventListener('keypress', handleBlankKeypress);
+                blankInput.addEventListener('keypress', handleBlankKeypress);
+                function handleBlankKeypress(e) {
+                    if (e.key === 'Enter' && !hasAnsweredCurrentQuestion) {
+                        const answer = blankInput.value;
+                        if (answer.trim()) onAnswerCallback(answer);
+                    }
                 }
             }
             break;
@@ -168,6 +273,7 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                 item.removeEventListener('click', handleLeftClick);
                 item.addEventListener('click', handleLeftClick);
                 function handleLeftClick() {
+                    if (hasAnsweredCurrentQuestion) return;
                     document.querySelectorAll('.matching-item').forEach(i => i.classList.remove('selected'));
                     item.classList.add('selected');
                     selectedLeft = parseInt(item.dataset.leftIdx);
@@ -178,12 +284,13 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                 item.removeEventListener('click', handleRightClick);
                 item.addEventListener('click', handleRightClick);
                 function handleRightClick() {
+                    if (hasAnsweredCurrentQuestion) return;
                     if (selectedLeft !== null) {
                         const rightIdx = parseInt(item.dataset.rightIdx);
                         matches[selectedLeft] = rightIdx;
                         const statusDiv = document.getElementById('matchingStatus');
                         if (statusDiv) {
-                            statusDiv.innerHTML = `<div class="matching-pair">Matched: ${selectedLeft + 1} → ${rightIdx + 1}</div>`;
+                            statusDiv.innerHTML = `<div class="matching-pair">✓ Matched: ${selectedLeft + 1} → ${rightIdx + 1}</div>`;
                         }
                         selectedLeft = null;
                         document.querySelectorAll('.matching-item').forEach(i => i.classList.remove('selected'));
@@ -196,7 +303,12 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                 matchingSubmitBtn.removeEventListener('click', handleMatchingSubmit);
                 matchingSubmitBtn.addEventListener('click', handleMatchingSubmit);
                 function handleMatchingSubmit() {
+                    if (hasAnsweredCurrentQuestion) return;
                     const answer = Object.values(matches);
+                    if (answer.length !== question.leftItems.length) {
+                        document.getElementById('answerFeedback').innerHTML = '<p style="color: #ed8936;">⚠️ Please match all items!</p>';
+                        return;
+                    }
                     onAnswerCallback(answer);
                 }
             }
@@ -213,6 +325,10 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                     item.removeEventListener('dragstart', handleDragStart);
                     item.addEventListener('dragstart', handleDragStart);
                     function handleDragStart(e) {
+                        if (hasAnsweredCurrentQuestion) {
+                            e.preventDefault();
+                            return false;
+                        }
                         draggedItem = item;
                         e.dataTransfer.effectAllowed = 'move';
                     }
@@ -226,7 +342,7 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                     item.addEventListener('drop', handleDrop);
                     function handleDrop(e) {
                         e.preventDefault();
-                        if (draggedItem !== item) {
+                        if (draggedItem !== item && !hasAnsweredCurrentQuestion) {
                             const parent = list;
                             if (draggedItem && item.parentNode === parent) {
                                 if (Array.from(parent.children).indexOf(draggedItem) < Array.from(parent.children).indexOf(item)) {
@@ -245,6 +361,7 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                 orderingSubmitBtn.removeEventListener('click', handleOrderingSubmit);
                 orderingSubmitBtn.addEventListener('click', handleOrderingSubmit);
                 function handleOrderingSubmit() {
+                    if (hasAnsweredCurrentQuestion) return;
                     const listItems = document.getElementById('orderingList');
                     if (listItems) {
                         const newOrder = Array.from(listItems.children).map(child => 
@@ -262,7 +379,12 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
                 numericSubmitBtn.removeEventListener('click', handleNumericSubmit);
                 numericSubmitBtn.addEventListener('click', handleNumericSubmit);
                 function handleNumericSubmit() {
+                    if (hasAnsweredCurrentQuestion) return;
                     const answer = parseFloat(document.getElementById('numericAnswer').value);
+                    if (isNaN(answer)) {
+                        document.getElementById('answerFeedback').innerHTML = '<p style="color: #ed8936;">⚠️ Please enter a valid number!</p>';
+                        return;
+                    }
                     onAnswerCallback(answer);
                 }
             }
@@ -278,6 +400,7 @@ async function submitAnswer(gameRef, playerId, answer, question, questionIndex, 
         
         if (existingAns.exists) {
             document.getElementById('answerFeedback').innerHTML = '<p style="color: #ed8936;">⚠️ You already answered this question!</p>';
+            hasAnsweredCurrentQuestion = true;
             return;
         }
         
@@ -313,13 +436,11 @@ async function submitAnswer(gameRef, playerId, answer, question, questionIndex, 
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        // Update player score using transaction to avoid conflicts
+        // Update player score
         const playerDocRef = gameRef.collection('players').doc(playerId);
-        await db.runTransaction(async (transaction) => {
-            const playerDoc = await transaction.get(playerDocRef);
-            const currentScore = playerDoc.data()?.score || 0;
-            transaction.update(playerDocRef, { score: currentScore + pointsEarned });
-        });
+        const playerDoc = await playerDocRef.get();
+        const currentScore = playerDoc.data()?.score || 0;
+        await playerDocRef.update({ score: currentScore + pointsEarned });
         
         // Disable options after answering
         disableQuestionInputs();
@@ -327,6 +448,7 @@ async function submitAnswer(gameRef, playerId, answer, question, questionIndex, 
     } catch (error) {
         console.error('Error submitting answer:', error);
         document.getElementById('answerFeedback').innerHTML = '<p style="color: #f56565;">Failed to submit answer. ' + error.message + '</p>';
+        hasAnsweredCurrentQuestion = false; // Allow retry on error
     }
 }
 
@@ -361,7 +483,6 @@ function disableQuestionInputs() {
 }
 
 function startTimer(expiresAt) {
-    // Clear any existing timer interval
     if (window.timerInterval) clearInterval(window.timerInterval);
     
     window.timerInterval = setInterval(() => {

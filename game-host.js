@@ -1,4 +1,6 @@
 // ==================== HOST FUNCTIONS ====================
+let currentQuestionTimeout = null;
+
 function generatePin() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -33,26 +35,30 @@ async function attachHostListeners(gameRef) {
     if (unsubGame) unsubGame();
     if (unsubPlayers) unsubPlayers();
     
-    // Listen to game state changes
     unsubGame = gameRef.onSnapshot(doc => {
         if (!doc.exists) return;
         const data = doc.data();
         document.getElementById('hostPin').innerText = data.pin;
         currentQuestions = data.questions;
         
-        // Render questions list
         renderQuestionsList(data.questions);
         
-        // Update button states
         if (data.status === 'active') {
-            document.getElementById('nextQuestionBtn').disabled = false;
+            const total = data.questions.length;
+            const curr = data.currentQuestionIndex;
+            
+            if (curr + 1 < total) {
+                document.getElementById('nextQuestionBtn').disabled = false;
+            } else {
+                document.getElementById('nextQuestionBtn').disabled = true;
+            }
             document.getElementById('startGameBtn').disabled = true;
             document.getElementById('endGameBtn').classList.remove('hidden');
             
-            const total = data.questions.length;
-            const curr = data.currentQuestionIndex;
-            if (curr + 1 >= total) {
-                document.getElementById('nextQuestionBtn').disabled = true;
+            if (curr >= 0 && curr < total) {
+                document.getElementById('hostGameStatus').innerHTML = `📢 Question ${curr + 1}/${total} is LIVE! Waiting for answers...`;
+            } else {
+                document.getElementById('hostGameStatus').innerHTML = '🚀 Game started! Press "Next Question" to begin.';
             }
         } else if (data.status === 'lobby') {
             document.getElementById('startGameBtn').disabled = false;
@@ -66,7 +72,6 @@ async function attachHostListeners(gameRef) {
         }
     });
     
-    // Listen to players for leaderboard
     const playersRef = gameRef.collection('players');
     unsubPlayers = playersRef.onSnapshot(snapshot => {
         const players = [];
@@ -166,7 +171,10 @@ async function nextQuestion() {
         const snap = await currentGameRef.get();
         const data = snap.data();
         
-        if (data.status !== 'active') return;
+        if (data.status !== 'active') {
+            alert('Game is not active. Please start the game first.');
+            return;
+        }
         
         let nextIdx = (data.currentQuestionIndex || -1) + 1;
         const questions = data.questions;
@@ -175,9 +183,16 @@ async function nextQuestion() {
             await currentGameRef.update({ status: 'ended' });
             document.getElementById('hostGameStatus').innerHTML = '🏁 Game Over! Great job everyone!';
             document.getElementById('nextQuestionBtn').disabled = true;
+            alert('Quiz completed! Game has ended.');
             return;
         }
         
+        // Clear any existing timeout
+        if (currentQuestionTimeout) {
+            clearTimeout(currentQuestionTimeout);
+        }
+        
+        // Update current question index
         await currentGameRef.update({ currentQuestionIndex: nextIdx });
         
         // Create active question with 15-second timer
@@ -190,17 +205,20 @@ async function nextQuestion() {
             questionIndex: nextIdx
         });
         
-        // Auto-close after 15 seconds
-        if (activeTimeout) clearTimeout(activeTimeout);
-        activeTimeout = setTimeout(async () => {
+        // Disable next button during question
+        document.getElementById('nextQuestionBtn').disabled = true;
+        document.getElementById('hostGameStatus').innerHTML = `📢 Question ${nextIdx + 1}/${questions.length} is LIVE! Waiting for answers...`;
+        
+        // Auto-close after 15 seconds and enable next button
+        currentQuestionTimeout = setTimeout(async () => {
             const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
             if (activeDoc.exists && activeDoc.data()?.isActive) {
                 await currentGameRef.collection('activeQuestion').doc('current').update({ isActive: false });
-                document.getElementById('hostGameStatus').innerHTML = '⏰ Time is up! Moving to next question...';
+                document.getElementById('hostGameStatus').innerHTML = `⏰ Time\'s up for Question ${nextIdx + 1}! Click Next to continue.`;
+                document.getElementById('nextQuestionBtn').disabled = false;
             }
         }, 15000);
         
-        document.getElementById('hostGameStatus').innerHTML = `📢 Question ${nextIdx + 1}/${questions.length} is now LIVE!`;
     } catch (error) {
         console.error('Error loading next question:', error);
         alert('Failed to load next question. Please try again.');
@@ -209,7 +227,11 @@ async function nextQuestion() {
 
 async function endGame() {
     if (confirm('Are you sure you want to end the game?')) {
+        if (currentQuestionTimeout) {
+            clearTimeout(currentQuestionTimeout);
+        }
         await currentGameRef.update({ status: 'ended' });
         document.getElementById('hostGameStatus').innerHTML = '🏁 Game ended by host.';
+        document.getElementById('nextQuestionBtn').disabled = true;
     }
 }
