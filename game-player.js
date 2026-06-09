@@ -17,8 +17,11 @@ async function joinGame() {
             return;
         }
         
+        // Sign in anonymously first
         const userCredential = await auth.signInAnonymously();
-        const playerRef = gameRef.collection('players').doc(userCredential.user.uid);
+        const playerId = userCredential.user.uid;
+        
+        const playerRef = gameRef.collection('players').doc(playerId);
         
         await playerRef.set({
             name: playerName,
@@ -27,17 +30,18 @@ async function joinGame() {
         });
         
         currentUser = { 
-            uid: userCredential.user.uid, 
+            uid: playerId, 
             isHost: false, 
             gameId: gamePin, 
             playerName: playerName 
         };
         sessionStorage.setItem('quizUser', JSON.stringify(currentUser));
         switchToPlayer(gamePin, playerName);
-        attachPlayerListeners(gameRef, userCredential.user.uid);
+        attachPlayerListeners(gameRef, playerId);
+        
     } catch (error) {
         console.error('Error joining game:', error);
-        document.getElementById('authError').innerText = 'Failed to join game. Please try again.';
+        document.getElementById('authError').innerText = 'Failed to join game. ' + error.message;
     }
 }
 
@@ -65,17 +69,27 @@ async function attachPlayerListeners(gameRef, playerId) {
     // Listen to active question
     const activeQRef = gameRef.collection('activeQuestion').doc('current');
     activeQuestionListener = activeQRef.onSnapshot(async (snap) => {
-        if (!snap.exists || !snap.data().isActive) {
+        if (!snap.exists) {
             document.getElementById('questionDisplay').innerHTML = '<div class="text-center">⏳ Getting next question ready...</div>';
             return;
         }
         
         const qData = snap.data();
+        
+        if (!qData.isActive) {
+            document.getElementById('questionDisplay').innerHTML = '<div class="text-center">⏳ Waiting for next question...</div>';
+            return;
+        }
+        
         const question = qData.question;
         const expiresAt = qData.expiresAt.toDate();
+        const questionIndex = qData.questionIndex;
+        
+        // Reset feedback for new question
+        document.getElementById('answerFeedback').innerHTML = '';
         
         renderPlayerQuestion(question, expiresAt, async (answer) => {
-            await submitAnswer(gameRef, playerId, answer, question, qData.questionIndex, expiresAt);
+            await submitAnswer(gameRef, playerId, answer, question, questionIndex, expiresAt);
         });
         
         // Timer countdown
@@ -87,7 +101,8 @@ async function attachPlayerListeners(gameRef, playerId) {
     if (unsubPlayers) unsubPlayers();
     unsubPlayers = playerScoreRef.onSnapshot(doc => {
         if (doc.exists) {
-            document.getElementById('playerScore').innerText = doc.data()?.score || 0;
+            const score = doc.data()?.score || 0;
+            document.getElementById('playerScore').innerText = score;
         }
     });
 }
@@ -103,35 +118,46 @@ function renderPlayerQuestion(question, expiresAt, onAnswerCallback) {
     
     displayDiv.innerHTML = renderer(question, onAnswerCallback);
     
-    // Attach event listeners based on type
-    attachQuestionEventListeners(question, onAnswerCallback);
+    // Attach event listeners after rendering
+    setTimeout(() => {
+        attachQuestionEventListeners(question, onAnswerCallback);
+    }, 100);
 }
 
 function attachQuestionEventListeners(question, onAnswerCallback) {
     switch(question.type) {
         case 'multiple_choice':
             document.querySelectorAll('.option').forEach(opt => {
-                opt.addEventListener('click', () => {
+                opt.removeEventListener('click', handleMCClick);
+                opt.addEventListener('click', handleMCClick);
+                function handleMCClick() {
                     const answer = parseInt(opt.dataset.optIndex);
                     onAnswerCallback(answer);
-                });
+                }
             });
             break;
             
         case 'true_false':
             document.querySelectorAll('.tf-option').forEach(opt => {
-                opt.addEventListener('click', () => {
+                opt.removeEventListener('click', handleTFClick);
+                opt.addEventListener('click', handleTFClick);
+                function handleTFClick() {
                     const answer = opt.dataset.value === 'true';
                     onAnswerCallback(answer);
-                });
+                }
             });
             break;
             
         case 'fill_blank':
-            document.getElementById('submitBlankBtn')?.addEventListener('click', () => {
-                const answer = document.getElementById('blankAnswer').value;
-                onAnswerCallback(answer);
-            });
+            const submitBtn = document.getElementById('submitBlankBtn');
+            if (submitBtn) {
+                submitBtn.removeEventListener('click', handleBlankSubmit);
+                submitBtn.addEventListener('click', handleBlankSubmit);
+                function handleBlankSubmit() {
+                    const answer = document.getElementById('blankAnswer').value;
+                    onAnswerCallback(answer);
+                }
+            }
             break;
             
         case 'matching':
@@ -139,89 +165,118 @@ function attachQuestionEventListeners(question, onAnswerCallback) {
             let matches = {};
             
             document.querySelectorAll('.matching-left .matching-item').forEach(item => {
-                item.addEventListener('click', () => {
+                item.removeEventListener('click', handleLeftClick);
+                item.addEventListener('click', handleLeftClick);
+                function handleLeftClick() {
                     document.querySelectorAll('.matching-item').forEach(i => i.classList.remove('selected'));
                     item.classList.add('selected');
                     selectedLeft = parseInt(item.dataset.leftIdx);
-                });
+                }
             });
             
             document.querySelectorAll('.matching-right .matching-item').forEach(item => {
-                item.addEventListener('click', () => {
+                item.removeEventListener('click', handleRightClick);
+                item.addEventListener('click', handleRightClick);
+                function handleRightClick() {
                     if (selectedLeft !== null) {
                         const rightIdx = parseInt(item.dataset.rightIdx);
                         matches[selectedLeft] = rightIdx;
                         const statusDiv = document.getElementById('matchingStatus');
-                        statusDiv.innerHTML = `<div class="matching-pair">Matched: ${selectedLeft + 1} → ${rightIdx + 1}</div>`;
+                        if (statusDiv) {
+                            statusDiv.innerHTML = `<div class="matching-pair">Matched: ${selectedLeft + 1} → ${rightIdx + 1}</div>`;
+                        }
                         selectedLeft = null;
                         document.querySelectorAll('.matching-item').forEach(i => i.classList.remove('selected'));
                     }
-                });
+                }
             });
             
-            document.getElementById('submitMatchingBtn')?.addEventListener('click', () => {
-                const answer = Object.values(matches);
-                onAnswerCallback(answer);
-            });
+            const matchingSubmitBtn = document.getElementById('submitMatchingBtn');
+            if (matchingSubmitBtn) {
+                matchingSubmitBtn.removeEventListener('click', handleMatchingSubmit);
+                matchingSubmitBtn.addEventListener('click', handleMatchingSubmit);
+                function handleMatchingSubmit() {
+                    const answer = Object.values(matches);
+                    onAnswerCallback(answer);
+                }
+            }
             break;
             
         case 'ordering':
             const list = document.getElementById('orderingList');
-            let draggedItem = null;
-            
-            const items = Array.from(list.children);
-            items.forEach(item => {
-                item.setAttribute('draggable', 'true');
-                item.addEventListener('dragstart', (e) => {
-                    draggedItem = item;
-                    e.dataTransfer.effectAllowed = 'move';
-                });
-                item.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                });
-                item.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    if (draggedItem !== item) {
-                        const parent = list;
-                        const draggedIndex = Array.from(parent.children).indexOf(draggedItem);
-                        const targetIndex = Array.from(parent.children).indexOf(item);
-                        if (draggedIndex < targetIndex) {
-                            item.parentNode.insertBefore(draggedItem, item.nextSibling);
-                        } else {
-                            item.parentNode.insertBefore(draggedItem, item);
+            if (list) {
+                let draggedItem = null;
+                
+                const items = Array.from(list.children);
+                items.forEach(item => {
+                    item.setAttribute('draggable', 'true');
+                    item.removeEventListener('dragstart', handleDragStart);
+                    item.addEventListener('dragstart', handleDragStart);
+                    function handleDragStart(e) {
+                        draggedItem = item;
+                        e.dataTransfer.effectAllowed = 'move';
+                    }
+                    item.removeEventListener('dragover', handleDragOver);
+                    item.addEventListener('dragover', handleDragOver);
+                    function handleDragOver(e) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                    }
+                    item.removeEventListener('drop', handleDrop);
+                    item.addEventListener('drop', handleDrop);
+                    function handleDrop(e) {
+                        e.preventDefault();
+                        if (draggedItem !== item) {
+                            const parent = list;
+                            if (draggedItem && item.parentNode === parent) {
+                                if (Array.from(parent.children).indexOf(draggedItem) < Array.from(parent.children).indexOf(item)) {
+                                    item.parentNode.insertBefore(draggedItem, item.nextSibling);
+                                } else {
+                                    item.parentNode.insertBefore(draggedItem, item);
+                                }
+                            }
                         }
                     }
                 });
-            });
+            }
             
-            document.getElementById('submitOrderingBtn')?.addEventListener('click', () => {
-                const newOrder = Array.from(list.children).map(child => 
-                    question.items.indexOf(child.textContent)
-                );
-                onAnswerCallback(newOrder);
-            });
+            const orderingSubmitBtn = document.getElementById('submitOrderingBtn');
+            if (orderingSubmitBtn) {
+                orderingSubmitBtn.removeEventListener('click', handleOrderingSubmit);
+                orderingSubmitBtn.addEventListener('click', handleOrderingSubmit);
+                function handleOrderingSubmit() {
+                    const listItems = document.getElementById('orderingList');
+                    if (listItems) {
+                        const newOrder = Array.from(listItems.children).map(child => 
+                            question.items.indexOf(child.textContent)
+                        );
+                        onAnswerCallback(newOrder);
+                    }
+                }
+            }
             break;
             
         case 'numeric':
-            document.getElementById('submitNumericBtn')?.addEventListener('click', () => {
-                const answer = parseFloat(document.getElementById('numericAnswer').value);
-                onAnswerCallback(answer);
-            });
+            const numericSubmitBtn = document.getElementById('submitNumericBtn');
+            if (numericSubmitBtn) {
+                numericSubmitBtn.removeEventListener('click', handleNumericSubmit);
+                numericSubmitBtn.addEventListener('click', handleNumericSubmit);
+                function handleNumericSubmit() {
+                    const answer = parseFloat(document.getElementById('numericAnswer').value);
+                    onAnswerCallback(answer);
+                }
+            }
             break;
     }
 }
 
 async function submitAnswer(gameRef, playerId, answer, question, questionIndex, expiresAt) {
     try {
-        // Check if already answered
-        const existingAns = await gameRef.collection('players')
-            .doc(playerId)
-            .collection('answers')
-            .doc('lastAnswer')
-            .get();
+        // Check if already answered this question
+        const answersRef = gameRef.collection('players').doc(playerId).collection('answers');
+        const existingAns = await answersRef.doc('q' + questionIndex).get();
         
-        if (existingAns.exists && existingAns.data()?.questionIndex === questionIndex) {
+        if (existingAns.exists) {
             document.getElementById('answerFeedback').innerHTML = '<p style="color: #ed8936;">⚠️ You already answered this question!</p>';
             return;
         }
@@ -249,24 +304,21 @@ async function submitAnswer(gameRef, playerId, answer, question, questionIndex, 
             `;
         }
         
-        // Save answer
-        await gameRef.collection('players')
-            .doc(playerId)
-            .collection('answers')
-            .doc('lastAnswer')
-            .set({
-                questionIndex: questionIndex,
-                answer: answer,
-                correct: isCorrect,
-                points: pointsEarned,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
+        // Save answer with unique document ID
+        await answersRef.doc('q' + questionIndex).set({
+            questionIndex: questionIndex,
+            answer: answer,
+            correct: isCorrect,
+            points: pointsEarned,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
         
-        // Update player score
-        const playerDoc = await gameRef.collection('players').doc(playerId).get();
-        const currentScore = playerDoc.data()?.score || 0;
-        await gameRef.collection('players').doc(playerId).update({
-            score: currentScore + pointsEarned
+        // Update player score using transaction to avoid conflicts
+        const playerDocRef = gameRef.collection('players').doc(playerId);
+        await db.runTransaction(async (transaction) => {
+            const playerDoc = await transaction.get(playerDocRef);
+            const currentScore = playerDoc.data()?.score || 0;
+            transaction.update(playerDocRef, { score: currentScore + pointsEarned });
         });
         
         // Disable options after answering
@@ -274,7 +326,7 @@ async function submitAnswer(gameRef, playerId, answer, question, questionIndex, 
         
     } catch (error) {
         console.error('Error submitting answer:', error);
-        document.getElementById('answerFeedback').innerHTML = '<p style="color: #f56565;">Failed to submit answer. Please try again.</p>';
+        document.getElementById('answerFeedback').innerHTML = '<p style="color: #f56565;">Failed to submit answer. ' + error.message + '</p>';
     }
 }
 
@@ -288,6 +340,10 @@ function getCorrectAnswerDisplay(question) {
             return question.correctAnswer;
         case 'numeric':
             return `${question.correctAnswer} ${question.unit || ''}`;
+        case 'matching':
+            return 'Please check the matching pairs above';
+        case 'ordering':
+            return 'Please check the correct order above';
         default:
             return 'Check the correct answer above';
     }
@@ -305,19 +361,24 @@ function disableQuestionInputs() {
 }
 
 function startTimer(expiresAt) {
-    const timerInterval = setInterval(() => {
+    // Clear any existing timer interval
+    if (window.timerInterval) clearInterval(window.timerInterval);
+    
+    window.timerInterval = setInterval(() => {
         const remaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
         const timerDiv = document.getElementById('timerDisplay');
-        timerDiv.innerText = remaining;
-        
-        if (remaining <= 5) {
-            timerDiv.classList.add('timer-warning');
-        } else {
-            timerDiv.classList.remove('timer-warning');
+        if (timerDiv) {
+            timerDiv.innerText = remaining;
+            
+            if (remaining <= 5) {
+                timerDiv.classList.add('timer-warning');
+            } else {
+                timerDiv.classList.remove('timer-warning');
+            }
         }
         
         if (remaining <= 0) {
-            clearInterval(timerInterval);
+            clearInterval(window.timerInterval);
         }
     }, 200);
 }
