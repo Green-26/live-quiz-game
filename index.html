@@ -3,18 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>🎯 SmartQuiz Live | Multi-Question Type Game</title>
+    <title>🎯 SmartQuiz Live | Loading...</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* 3D Animated Background */
+        body {
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        #three-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+        }
+        
+        .container {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .card, .btn, .input-field {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .header h1, .subtitle {
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+    </style>
 </head>
 <body>
+    <div id="three-bg"></div>
+    
     <div class="container">
-        <!-- Header -->
         <header class="header">
             <h1>🎯 SmartQuiz Live Arena</h1>
             <p class="subtitle">7 Question Types | Real-time Scoring | Live Leaderboard</p>
         </header>
 
-        <!-- Auth Section -->
         <div id="authSection" class="auth-section">
             <div class="card">
                 <div class="flex-row">
@@ -27,15 +58,12 @@
             </div>
         </div>
 
-        <!-- Host Panel -->
         <div id="hostPanel" class="panel hidden">
-            <!-- Game Controls -->
             <div class="card">
                 <div class="flex-row" style="justify-content: space-between; align-items: center;">
+                    <div>🎲 Game PIN: <strong id="hostPin" style="font-size: 1.5rem;">------</strong></div>
                     <div>
-                        🎲 Game PIN: <strong id="hostPin" style="font-size: 1.5rem;">------</strong>
-                    </div>
-                    <div>
+                        <button id="previewQuestionsBtn" class="btn btn-dark">👁️ Preview Questions</button>
                         <button id="startGameBtn" class="btn btn-success">🚀 Start Game</button>
                         <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ Next</button>
                         <button id="endGameBtn" class="btn btn-danger hidden">🏁 End Game</button>
@@ -43,9 +71,8 @@
                 </div>
             </div>
 
-            <!-- Question Builder -->
             <div class="card">
-                <h3>📝 Question Builder (SmartSchool Compatible)</h3>
+                <h3>📝 Question Builder</h3>
                 <div class="flex-row" style="margin-bottom: 15px;">
                     <select id="questionTypeSelect" class="input-field" style="flex:1">
                         <option value="multiple_choice">Multiple Choice</option>
@@ -69,29 +96,26 @@
                     </select>
                 </div>
 
-                <!-- Dynamic Question Form -->
                 <div id="questionForm"></div>
 
                 <div class="flex-row mt-20">
                     <button id="addQuestionBtn" class="btn btn-primary">➕ Add Question</button>
+                    <button id="clearAllQuestionsBtn" class="btn btn-danger">🗑️ Clear All</button>
                 </div>
 
                 <div id="questionsList" class="mt-20" style="max-height: 300px; overflow-y: auto;"></div>
             </div>
 
-            <!-- Live Leaderboard -->
             <div class="card">
                 <h3>🏆 Live Leaderboard</h3>
                 <div id="hostLeaderboard" class="leaderboard">Waiting for players...</div>
             </div>
 
-            <!-- Game Status -->
             <div class="card">
                 <div id="hostGameStatus">📌 Game in lobby mode. Add questions and press Start!</div>
             </div>
         </div>
 
-        <!-- Player Panel -->
         <div id="playerPanel" class="panel hidden">
             <div class="card">
                 <div class="flex-row" style="justify-content: space-between;">
@@ -117,12 +141,25 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>👁️ Question Preview</h2>
+                <button id="closeModalBtn" class="btn btn-danger">&times;</button>
+            </div>
+            <div id="previewContent" class="modal-body"></div>
+            <div class="modal-footer">
+                <button id="closeModalFooterBtn" class="btn btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     
-    <!-- Game Scripts (all in root directory, no js folder) -->
     <script src="config.js"></script>
     <script src="questions.js"></script>
     <script src="game-host.js"></script>
