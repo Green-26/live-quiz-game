@@ -3,138 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>🎯 SmartQuiz Live | Real-time Quiz Game</title>
+    <title>🌐 SmartQuiz Live | Neural Arena</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <canvas id="bgCanvas"></canvas>
+    <canvas id="networkCanvas"></canvas>
     
     <div class="container">
         <header>
-            <h1>🎯 SmartQuiz Live Arena</h1>
-            <p>Real-time Quiz | Live Leaderboard | 7 Question Types</p>
+            <h1>🌐 SmartQuiz Live Arena</h1>
+            <p>Neural Network Powered | Real-time Quiz | Live Leaderboard</p>
         </header>
 
         <!-- LANDING PAGE -->
         <div id="landingPage">
-            <div class="card">
-                <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-                    <button id="hostNewGameBtn" class="btn btn-success" style="padding: 20px 40px; font-size: 18px;">🎮 Host New Game</button>
-                    <button id="joinGameBtn" class="btn btn-primary" style="padding: 20px 40px; font-size: 18px;">🎓 Join Game</button>
+            <div class="card glass">
+                <div class="btn-group">
+                    <button id="hostBtn" class="btn btn-primary glow">🎮 Host New Game</button>
+                    <button id="studentJoinBtn" class="btn btn-success glow">🎓 Join Game</button>
                 </div>
             </div>
         </div>
 
-        <!-- HOST PANEL - Create Questions -->
+        <!-- HOST PANEL -->
         <div id="hostPanel" class="hidden">
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="card glass">
+                <div class="flex-between">
                     <h2>📝 Create Your Quiz</h2>
-                    <button id="backFromHost" class="btn btn-secondary">← Back</button>
+                    <button id="backHostBtn" class="btn btn-sm">← Back</button>
                 </div>
             </div>
 
-            <div class="card">
-                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-                    <select id="questionType" class="input-field" style="flex:1">
-                        <option value="multiple_choice">📋 Multiple Choice</option>
-                        <option value="true_false">✓ True / False</option>
-                        <option value="fill_blank">✏️ Fill in the Blank</option>
-                        <option value="numeric">🔢 Numeric Answer</option>
+            <div class="card glass">
+                <div class="form-row">
+                    <select id="qType" class="input">
+                        <option value="mc">Multiple Choice</option>
+                        <option value="tf">True / False</option>
+                        <option value="fb">Fill in Blank</option>
+                        <option value="num">Numeric</option>
                     </select>
-                    <select id="difficulty" class="input-field" style="flex:1">
-                        <option value="easy">📘 Easy</option>
-                        <option value="medium">📙 Medium</option>
-                        <option value="hard">📕 Hard</option>
+                    <select id="difficulty" class="input">
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
                     </select>
                 </div>
                 
                 <div id="questionForm"></div>
                 
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button id="addQuestion" class="btn btn-primary">➕ Add Question</button>
-                    <button id="addSample" class="btn btn-secondary">📚 Sample Questions</button>
-                    <button id="clearAll" class="btn btn-danger">🗑️ Clear All</button>
+                <div class="btn-group">
+                    <button id="addQBtn" class="btn btn-primary">➕ Add</button>
+                    <button id="sampleBtn" class="btn btn-info">📚 Sample</button>
+                    <button id="clearBtn" class="btn btn-danger">🗑️ Clear</button>
                 </div>
                 
-                <div id="questionsList" class="questions-list" style="margin-top: 20px;"></div>
+                <div id="questionsList" class="q-list"></div>
             </div>
 
-            <div class="card">
-                <button id="createGame" class="btn btn-success" style="width: 100%; padding: 15px; font-size: 16px;">🚀 CREATE GAME & HOST NOW</button>
+            <div class="card glass">
+                <button id="createGameBtn" class="btn btn-success btn-block">🚀 CREATE GAME & HOST</button>
             </div>
         </div>
 
-        <!-- ACTIVE GAME DASHBOARD (Teacher Controls) -->
+        <!-- GAME DASHBOARD (HOST) -->
         <div id="gameDashboard" class="hidden">
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                    <div class="pin-display">🎲 GAME PIN: <strong id="gamePin">------</strong></div>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button id="startGameBtn" class="btn btn-success">▶️ START GAME</button>
-                        <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ NEXT QUESTION</button>
-                        <button id="endGameBtn" class="btn btn-danger">🏁 END GAME</button>
-                        <button id="exitGameBtn" class="btn btn-secondary">🚪 EXIT</button>
+            <div class="card glass">
+                <div class="flex-between">
+                    <div class="pin-box">🎲 PIN: <strong id="gamePin">------</strong></div>
+                    <div class="btn-group">
+                        <button id="startGameControl" class="btn btn-success">▶ START</button>
+                        <button id="nextControl" class="btn btn-warning" disabled>⏩ NEXT</button>
+                        <button id="endControl" class="btn btn-danger">⏹ END</button>
+                        <button id="exitControl" class="btn btn-sm">✖ Exit</button>
                     </div>
                 </div>
             </div>
 
-            <div class="card">
-                <div id="gameStatusMsg" class="status-message">📌 Game created. Share PIN with students. Click START when ready.</div>
+            <div class="card glass">
+                <div id="statusMsg" class="status">📌 Game created. Share PIN. Click START.</div>
             </div>
 
-            <div class="card">
+            <div class="card glass">
                 <h3>📢 Current Question</h3>
-                <div id="currentQuestionDisplay">No active question yet. Click START GAME then NEXT QUESTION.</div>
+                <div id="currentQDisplay">No active question</div>
             </div>
 
-            <div class="two-columns">
-                <div class="card">
-                    <h3>🏆 Live Leaderboard</h3>
-                    <div id="leaderboardList">Waiting for players...</div>
-                    <div id="playerCount" class="player-count" style="margin-top: 15px;"></div>
+            <div class="grid-2">
+                <div class="card glass">
+                    <h3>🏆 Leaderboard</h3>
+                    <div id="leaderboard">Waiting...</div>
+                    <div id="playerCount" class="mt-10"></div>
                 </div>
-                <div class="card">
-                    <h3>📊 Game Statistics</h3>
-                    <div id="statsDisplay"></div>
+                <div class="card glass">
+                    <h3>📊 Stats</h3>
+                    <div id="stats"></div>
                 </div>
             </div>
         </div>
 
         <!-- STUDENT PANEL -->
         <div id="studentPanel" class="hidden">
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2>🎓 Join a Live Game</h2>
-                    <button id="backFromStudent" class="btn btn-secondary">← Back</button>
+            <div class="card glass">
+                <div class="flex-between">
+                    <h2>🎓 Join Game</h2>
+                    <button id="backStudentBtn" class="btn btn-sm">← Back</button>
                 </div>
             </div>
 
-            <div class="card">
-                <input type="text" id="studentNameInput" class="input-field" placeholder="Enter your name">
-                <input type="text" id="gamePinInput" class="input-field" placeholder="Enter Game PIN">
-                <button id="joinGameBtn2" class="btn btn-primary" style="width: 100%;">🎮 Join Game</button>
-                <div id="joinErrorMsg" class="error-message" style="margin-top: 15px;"></div>
+            <div class="card glass">
+                <input type="text" id="studentName" class="input" placeholder="Your Name">
+                <input type="text" id="gamePinStudent" class="input" placeholder="Game PIN">
+                <button id="joinGameControl" class="btn btn-primary btn-block">🎮 Join</button>
+                <div id="joinError" class="error"></div>
             </div>
 
-            <div id="waitingArea" class="card text-center hidden">
+            <div id="waitingArea" class="card glass text-center hidden">
                 <div class="spinner">⏳</div>
-                <h3>Waiting for host to start the game...</h3>
-                <p>Get ready for the quiz!</p>
+                <h3>Waiting for host to start...</h3>
             </div>
 
-            <div id="quizAreaStudent" class="hidden">
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+            <div id="quizArea" class="hidden">
+                <div class="card glass">
+                    <div class="flex-between">
                         <div>👤 <strong id="studentNameDisplay"></strong></div>
-                        <div>🎲 PIN: <strong id="pinDisplay"></strong></div>
+                        <div>🎲 <strong id="pinDisplay"></strong></div>
                         <div>⭐ Score: <strong id="scoreDisplay">0</strong></div>
                     </div>
                 </div>
-                <div class="card">
-                    <div id="questionContainer"></div>
-                    <div class="timer-circle" id="timerDisplay">15</div>
-                    <div id="feedbackArea" class="mt-20"></div>
+                <div class="card glass">
+                    <div id="questionDisplay"></div>
+                    <div class="timer" id="timer">15</div>
+                    <div id="feedback" class="mt-10"></div>
                 </div>
             </div>
 

@@ -1,733 +1,664 @@
-// ==================== APP.JS - FULLY WORKING VERSION ====================
+// ==================== GAME STATE ====================
+let myQuestions = [];
+let currentGame = null;
+let myStudentId = null;
+let isGameHost = false;
+let currentPin = null;
+let unsubscribeGame = null;
+let unsubscribePlayers = null;
+let unsubscribeQuestion = null;
+let gameTimer = null;
+let canAnswer = true;
 
-let localQuestions = [];
-let isHost = false;
-let studentId = null;
-let currentGameRef = null;
-let gameUnsubscribe = null;
-let playersUnsubscribe = null;
-let questionUnsubscribe = null;
-let hasAnsweredFlag = false;
-let questionTimer = null;
+// ==================== UI HELPERS ====================
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
 
-// ==================== UI FUNCTIONS ====================
-function showPanel(id) { 
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('hidden');
-}
-function hidePanel(id) { 
-    const el = document.getElementById(id);
-    if (el) el.classList.add('hidden');
-}
-
-// ==================== QUESTION FORM ====================
-function renderQuestionBuilder() {
-    const type = document.getElementById('questionType').value;
+// ==================== QUESTION BUILDER ====================
+function renderQuestionForm() {
+    const type = document.getElementById('qType').value;
     const container = document.getElementById('questionForm');
-    if (!container) return;
     
-    let html = '<input type="text" id="qText" class="input-field" placeholder="Enter your question..." style="margin-bottom:15px;">';
+    let html = '<input type="text" id="qText" class="input" placeholder="Question">';
     
-    if (type === 'multiple_choice') {
+    if (type === 'mc') {
         html += `
-            <input type="text" id="opt1" class="input-field" placeholder="Option A" style="margin-bottom:15px;">
-            <input type="text" id="opt2" class="input-field" placeholder="Option B" style="margin-bottom:15px;">
-            <input type="text" id="opt3" class="input-field" placeholder="Option C" style="margin-bottom:15px;">
-            <input type="text" id="opt4" class="input-field" placeholder="Option D" style="margin-bottom:15px;">
-            <select id="correctOpt" class="input-field" style="margin-bottom:15px;">
-                <option value="0">Option A is correct</option>
-                <option value="1">Option B is correct</option>
-                <option value="2">Option C is correct</option>
-                <option value="3">Option D is correct</option>
+            <input type="text" id="opt1" class="input" placeholder="Option A">
+            <input type="text" id="opt2" class="input" placeholder="Option B">
+            <input type="text" id="opt3" class="input" placeholder="Option C">
+            <input type="text" id="opt4" class="input" placeholder="Option D">
+            <select id="correctOpt" class="input">
+                <option value="0">A is correct</option>
+                <option value="1">B is correct</option>
+                <option value="2">C is correct</option>
+                <option value="3">D is correct</option>
             </select>
         `;
-    } else if (type === 'true_false') {
-        html += `<select id="correctOpt" class="input-field" style="margin-bottom:15px;"><option value="true">True</option><option value="false">False</option></select>`;
-    } else if (type === 'fill_blank') {
-        html += `<input type="text" id="correctAnswer" class="input-field" placeholder="Correct answer" style="margin-bottom:15px;">`;
-    } else if (type === 'numeric') {
-        html += `
-            <input type="number" id="correctValue" class="input-field" placeholder="Correct answer" style="margin-bottom:15px;">
-            <input type="text" id="unit" class="input-field" placeholder="Unit (optional)" style="margin-bottom:15px;">
-        `;
+    } else if (type === 'tf') {
+        html += `<select id="correctOpt" class="input"><option value="true">True</option><option value="false">False</option></select>`;
+    } else if (type === 'fb') {
+        html += `<input type="text" id="correctAns" class="input" placeholder="Correct answer">`;
+    } else if (type === 'num') {
+        html += `<input type="number" id="correctVal" class="input" placeholder="Correct answer">`;
     }
     
-    html += `<input type="number" id="points" class="input-field" placeholder="Points" value="100">`;
+    html += `<input type="number" id="points" class="input" placeholder="Points" value="100">`;
     container.innerHTML = html;
 }
 
-function buildQuestionObject() {
-    const type = document.getElementById('questionType').value;
+function buildQuestion() {
+    const type = document.getElementById('qType').value;
     const text = document.getElementById('qText')?.value.trim();
-    const difficulty = document.getElementById('difficulty').value;
+    const diff = document.getElementById('difficulty').value;
     const points = parseInt(document.getElementById('points')?.value) || 100;
     
-    if (!text) { alert('Please enter a question'); return null; }
+    if (!text) { alert('Enter question'); return null; }
     
-    const question = { id: Date.now(), type, text, difficulty, points };
+    const q = { id: Date.now(), type, text, difficulty: diff, points };
     
-    if (type === 'multiple_choice') {
-        const opt1 = document.getElementById('opt1')?.value.trim();
-        const opt2 = document.getElementById('opt2')?.value.trim();
-        const opt3 = document.getElementById('opt3')?.value.trim();
-        const opt4 = document.getElementById('opt4')?.value.trim();
-        if (!opt1 || !opt2 || !opt3 || !opt4) { alert('All options required'); return null; }
-        question.options = [opt1, opt2, opt3, opt4];
-        question.correctAnswer = parseInt(document.getElementById('correctOpt').value);
-    } else if (type === 'true_false') {
-        question.correctAnswer = document.getElementById('correctOpt').value === 'true';
-    } else if (type === 'fill_blank') {
-        const correct = document.getElementById('correctAnswer')?.value.trim();
-        if (!correct) { alert('Correct answer required'); return null; }
-        question.correctAnswer = correct;
-    } else if (type === 'numeric') {
-        const correct = parseFloat(document.getElementById('correctValue')?.value);
-        if (isNaN(correct)) { alert('Correct value required'); return null; }
-        question.correctAnswer = correct;
-        question.unit = document.getElementById('unit')?.value || '';
+    if (type === 'mc') {
+        const o1 = document.getElementById('opt1')?.value.trim();
+        const o2 = document.getElementById('opt2')?.value.trim();
+        const o3 = document.getElementById('opt3')?.value.trim();
+        const o4 = document.getElementById('opt4')?.value.trim();
+        if (!o1 || !o2 || !o3 || !o4) { alert('All options required'); return null; }
+        q.options = [o1, o2, o3, o4];
+        q.correct = parseInt(document.getElementById('correctOpt').value);
+    } else if (type === 'tf') {
+        q.correct = document.getElementById('correctOpt').value === 'true';
+    } else if (type === 'fb') {
+        const ca = document.getElementById('correctAns')?.value.trim();
+        if (!ca) { alert('Correct answer required'); return null; }
+        q.correct = ca;
+    } else if (type === 'num') {
+        const cv = parseFloat(document.getElementById('correctVal')?.value);
+        if (isNaN(cv)) { alert('Correct value required'); return null; }
+        q.correct = cv;
+        q.unit = '';
     }
-    return question;
+    return q;
 }
 
-function updateQuestionsDisplay() {
+function renderQuestions() {
     const container = document.getElementById('questionsList');
-    if (!container) return;
-    
-    if (!localQuestions.length) {
-        container.innerHTML = '<p style="text-align:center; color:#718096;">No questions yet. Add some!</p>';
+    if (!myQuestions.length) {
+        container.innerHTML = '<p class="text-center">No questions yet</p>';
         return;
     }
-    
-    container.innerHTML = localQuestions.map((q, i) => `
-        <div class="question-item">
-            <div><strong>${i+1}.</strong> ${escapeHtml(q.text.substring(0, 50))} 🎯 ${q.points} pts</div>
-            <button class="remove-q-btn" data-index="${i}">✖ Remove</button>
+    container.innerHTML = myQuestions.map((q, i) => `
+        <div class="q-item">
+            <div><strong>${i+1}.</strong> ${escapeHtml(q.text.substring(0, 50))} 🎯 ${q.points}pts</div>
+            <button class="remove-q" data-idx="${i}">✖</button>
         </div>
     `).join('');
-    
-    document.querySelectorAll('.remove-q-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const idx = parseInt(btn.dataset.index);
-            localQuestions.splice(idx, 1);
-            updateQuestionsDisplay();
-        });
+    document.querySelectorAll('.remove-q').forEach(btn => {
+        btn.onclick = () => {
+            const idx = parseInt(btn.dataset.idx);
+            myQuestions.splice(idx, 1);
+            renderQuestions();
+        };
     });
 }
 
-function addNewQuestion() { const q = buildQuestionObject(); if (q) { localQuestions.push(q); updateQuestionsDisplay(); document.getElementById('qText').value = ''; alert('Question added!'); } }
-function addExampleQuestions() {
-    localQuestions.push({ id: Date.now()+1, type: 'multiple_choice', text: 'What is the capital of France?', options: ['London', 'Paris', 'Berlin', 'Madrid'], correctAnswer: 1, difficulty: 'easy', points: 100 });
-    localQuestions.push({ id: Date.now()+2, type: 'true_false', text: 'The Earth is flat', correctAnswer: false, difficulty: 'easy', points: 50 });
-    localQuestions.push({ id: Date.now()+3, type: 'numeric', text: 'What is 15 + 27?', correctAnswer: 42, difficulty: 'easy', points: 75 });
-    updateQuestionsDisplay();
-    alert('Sample questions added!');
+function addQuestion() { const q = buildQuestion(); if (q) { myQuestions.push(q); renderQuestions(); document.getElementById('qText').value = ''; alert('Added!'); } }
+function addSamples() {
+    myQuestions.push({ id: Date.now()+1, type: 'mc', text: 'What is the capital of France?', options: ['London', 'Paris', 'Berlin', 'Madrid'], correct: 1, difficulty: 'easy', points: 100 });
+    myQuestions.push({ id: Date.now()+2, type: 'tf', text: 'The Earth is flat', correct: false, difficulty: 'easy', points: 50 });
+    myQuestions.push({ id: Date.now()+3, type: 'num', text: '15 + 27 = ?', correct: 42, difficulty: 'easy', points: 75 });
+    renderQuestions();
+    alert('Samples added!');
 }
-function clearAllLocalQuestions() { if (confirm('Clear all questions?')) { localQuestions = []; updateQuestionsDisplay(); } }
+function clearQuestions() { if (confirm('Clear all?')) { myQuestions = []; renderQuestions(); } }
 
 // ==================== HOST FUNCTIONS ====================
-async function createAndLaunchGame() {
-    if (!localQuestions.length) { alert('Please add questions first!'); return; }
+async function createGame() {
+    if (!myQuestions.length) { alert('Add questions first'); return; }
     
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    currentPin = pin;
     
     try {
         const user = await auth.signInAnonymously();
         const gameRef = db.collection('games').doc(pin);
+        
         await gameRef.set({
-            pin: pin, 
-            status: 'waiting', 
-            currentQuestionIndex: -1,
-            questions: localQuestions, 
+            pin: pin,
+            status: 'waiting',
+            currentIndex: -1,
+            questions: myQuestions,
             hostId: user.user.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        currentGameRef = gameRef;
-        isHost = true;
+        currentGame = gameRef;
+        isGameHost = true;
         
-        hidePanel('hostPanel');
-        showPanel('gameDashboard');
+        hide('hostPanel');
+        show('gameDashboard');
         document.getElementById('gamePin').innerText = pin;
-        document.getElementById('gameStatusMsg').innerHTML = `📌 Game created! PIN: ${pin} - Share with students. Click START when ready.`;
+        document.getElementById('statusMsg').innerHTML = `✅ Game created! PIN: ${pin} - Share with students. Click START.`;
         
-        // Listen to game changes
+        // Listen to game
         gameRef.onSnapshot((doc) => {
             if (!doc.exists) return;
             const data = doc.data();
-            const startBtn = document.getElementById('startGameBtn');
-            const nextBtn = document.getElementById('nextQuestionBtn');
+            const startBtn = document.getElementById('startGameControl');
+            const nextBtn = document.getElementById('nextControl');
             
             if (data.status === 'active') {
                 startBtn.disabled = true;
-                const current = data.currentQuestionIndex;
+                const idx = data.currentIndex;
                 const total = data.questions.length;
-                nextBtn.disabled = (current + 1 >= total);
-                if (current >= 0) {
-                    document.getElementById('currentQuestionDisplay').innerHTML = `<strong>Question ${current+1}/${total}</strong><br>${escapeHtml(data.questions[current].text)}`;
+                nextBtn.disabled = (idx + 1 >= total);
+                if (idx >= 0) {
+                    document.getElementById('currentQDisplay').innerHTML = `<strong>Q${idx+1}/${total}</strong><br>${escapeHtml(data.questions[idx].text)}`;
                 }
-                document.getElementById('gameStatusMsg').innerHTML = `📢 Question ${current+1}/${total} LIVE!`;
+                document.getElementById('statusMsg').innerHTML = `📢 Question ${idx+1}/${total} LIVE!`;
             } else if (data.status === 'waiting') {
                 startBtn.disabled = false;
                 nextBtn.disabled = true;
-                document.getElementById('currentQuestionDisplay').innerHTML = 'Click START GAME to begin';
-                document.getElementById('gameStatusMsg').innerHTML = `📌 PIN: ${data.pin} - Share with students.`;
+                document.getElementById('statusMsg').innerHTML = `📌 PIN: ${pin} - Share with students. Click START.`;
             } else if (data.status === 'ended') {
                 startBtn.disabled = true;
                 nextBtn.disabled = true;
-                document.getElementById('gameStatusMsg').innerHTML = '🏁 Game ended!';
+                document.getElementById('statusMsg').innerHTML = '🏁 Game ended!';
             }
         });
         
         // Listen to players
-        gameRef.collection('players').onSnapshot((snapshot) => {
+        gameRef.collection('players').onSnapshot((snap) => {
             const players = [];
-            snapshot.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
+            snap.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
             players.sort((a, b) => (b.score || 0) - (a.score || 0));
             
-            const container = document.getElementById('leaderboardList');
-            const countSpan = document.getElementById('playerCount');
+            const container = document.getElementById('leaderboard');
+            const countDiv = document.getElementById('playerCount');
             
             if (!players.length) {
-                if (container) container.innerHTML = '<div class="leaderboard-entry">No players yet. Share the PIN!</div>';
-                if (countSpan) countSpan.innerHTML = '👥 0 players joined';
+                container.innerHTML = '<div class="leaderboard-entry">No players yet</div>';
+                countDiv.innerHTML = '👥 0 players';
             } else {
-                if (container) {
-                    container.innerHTML = players.map((p, i) => `
-                        <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}">
-                            <span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)}</span>
-                            <span>⭐ ${p.score || 0}</span>
-                        </div>
-                    `).join('');
-                }
-                if (countSpan) countSpan.innerHTML = `👥 ${players.length} player(s) joined`;
+                container.innerHTML = players.map((p, i) => `
+                    <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}">
+                        <span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)}</span>
+                        <span>⭐ ${p.score || 0}</span>
+                    </div>
+                `).join('');
+                countDiv.innerHTML = `👥 ${players.length} player(s)`;
             }
             
-            const totalScore = players.reduce((sum, p) => sum + (p.score || 0), 0);
-            const avgScore = players.length ? Math.round(totalScore / players.length) : 0;
-            const topScore = players.length ? players[0].score || 0 : 0;
-            const statsDiv = document.getElementById('statsDisplay');
-            if (statsDiv) {
-                statsDiv.innerHTML = `
-                    <div class="leaderboard-entry">📊 Average: ${avgScore}</div>
-                    <div class="leaderboard-entry">🏆 Highest: ${topScore}</div>
-                    <div class="leaderboard-entry">👥 Total: ${players.length}</div>
-                `;
-            }
+            const total = players.reduce((s, p) => s + (p.score || 0), 0);
+            const avg = players.length ? Math.round(total / players.length) : 0;
+            const top = players.length ? players[0].score || 0 : 0;
+            document.getElementById('stats').innerHTML = `
+                <div class="leaderboard-entry">📊 Average: ${avg}</div>
+                <div class="leaderboard-entry">🏆 Top: ${top}</div>
+                <div class="leaderboard-entry">👥 Total: ${players.length}</div>
+            `;
         });
         
-    } catch (error) { alert('Error: ' + error.message); }
+    } catch (err) { alert('Error: ' + err.message); }
 }
 
-async function startGameHost() { 
-    if (!currentGameRef) return;
-    await currentGameRef.update({ status: 'active', currentQuestionIndex: -1 }); 
-    document.getElementById('gameStatusMsg').innerHTML = '🚀 Game started! Click NEXT QUESTION.';
-    document.getElementById('nextQuestionBtn').disabled = false;
+async function startGame() {
+    if (!currentGame) return;
+    await currentGame.update({ status: 'active', currentIndex: -1 });
+    document.getElementById('statusMsg').innerHTML = '🚀 Game started! Click NEXT.';
+    document.getElementById('nextControl').disabled = false;
 }
 
-async function sendNextQuestionHost() {
-    if (!currentGameRef) return;
+async function nextQuestion() {
+    if (!currentGame) return;
     
-    const doc = await currentGameRef.get();
+    const doc = await currentGame.get();
     const data = doc.data();
-    let nextIdx = (data.currentQuestionIndex || -1) + 1;
+    let nextIdx = (data.currentIndex || -1) + 1;
     
     if (nextIdx >= data.questions.length) {
-        await currentGameRef.update({ status: 'ended' });
+        await currentGame.update({ status: 'ended' });
         alert('Quiz completed!');
         return;
     }
     
-    // Update question index
-    await currentGameRef.update({ currentQuestionIndex: nextIdx });
+    await currentGame.update({ currentIndex: nextIdx });
     
-    // Create active question
-    const activeRef = currentGameRef.collection('activeQuestion').doc('current');
+    const activeRef = currentGame.collection('activeQuestion').doc('current');
     await activeRef.set({
         question: data.questions[nextIdx],
         startedAt: firebase.firestore.FieldValue.serverTimestamp(),
         expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 15000)),
-        isActive: true, 
-        questionIndex: nextIdx
+        isActive: true,
+        index: nextIdx
     });
     
-    document.getElementById('nextQuestionBtn').disabled = true;
-    document.getElementById('gameStatusMsg').innerHTML = `📢 Question ${nextIdx+1}/${data.questions.length} LIVE!`;
+    document.getElementById('nextControl').disabled = true;
+    document.getElementById('statusMsg').innerHTML = `📢 Question ${nextIdx+1}/${data.questions.length} LIVE!`;
     
-    if (questionTimer) clearTimeout(questionTimer);
-    questionTimer = setTimeout(async () => {
-        const active = await currentGameRef.collection('activeQuestion').doc('current').get();
+    if (gameTimer) clearTimeout(gameTimer);
+    gameTimer = setTimeout(async () => {
+        const active = await currentGame.collection('activeQuestion').doc('current').get();
         if (active.exists && active.data()?.isActive) {
             await activeRef.update({ isActive: false });
-            document.getElementById('gameStatusMsg').innerHTML = `⏰ Time\'s up! Click NEXT.`;
-            document.getElementById('nextQuestionBtn').disabled = false;
+            document.getElementById('statusMsg').innerHTML = `⏰ Time\'s up! Click NEXT.`;
+            document.getElementById('nextControl').disabled = false;
         }
     }, 15000);
 }
 
-async function endGameHost() {
-    if (!currentGameRef) return;
-    if (confirm('End the game?')) {
-        if (questionTimer) clearTimeout(questionTimer);
-        await currentGameRef.update({ status: 'ended' });
-        document.getElementById('nextQuestionBtn').disabled = true;
-        document.getElementById('startGameBtn').disabled = true;
-    }
+async function endGame() {
+    if (!confirm('End game?')) return;
+    if (gameTimer) clearTimeout(gameTimer);
+    await currentGame.update({ status: 'ended' });
+    document.getElementById('nextControl').disabled = true;
+    document.getElementById('startGameControl').disabled = true;
 }
 
 // ==================== STUDENT FUNCTIONS ====================
-async function joinStudentGame() {
-    const name = document.getElementById('studentNameInput').value.trim();
-    const pin = document.getElementById('gamePinInput').value.trim();
+async function joinGame() {
+    const name = document.getElementById('studentName').value.trim();
+    const pin = document.getElementById('gamePinStudent').value.trim();
     
-    if (!name || !pin) { 
-        document.getElementById('joinErrorMsg').innerHTML = '❌ Enter name and PIN'; 
-        return; 
+    if (!name || !pin) {
+        document.getElementById('joinError').innerHTML = 'Enter name and PIN';
+        return;
+    }
+    
+    const gameRef = db.collection('games').doc(pin);
+    const gameDoc = await gameRef.get();
+    
+    if (!gameDoc.exists) {
+        document.getElementById('joinError').innerHTML = 'Game not found!';
+        return;
+    }
+    
+    if (gameDoc.data().status === 'ended') {
+        document.getElementById('joinError').innerHTML = 'Game ended';
+        return;
     }
     
     try {
-        const gameRef = db.collection('games').doc(pin);
-        const gameDoc = await gameRef.get();
-        
-        if (!gameDoc.exists) { 
-            document.getElementById('joinErrorMsg').innerHTML = '❌ Game not found!'; 
-            return; 
-        }
-        
-        const gameData = gameDoc.data();
-        if (gameData.status === 'ended') { 
-            document.getElementById('joinErrorMsg').innerHTML = '❌ Game already ended'; 
-            return; 
-        }
-        
         const user = await auth.signInAnonymously();
-        studentId = user.user.uid;
-        currentGameRef = gameRef;
+        myStudentId = user.user.uid;
+        currentGame = gameRef;
+        currentPin = pin;
         
-        await gameRef.collection('players').doc(studentId).set({ 
-            name: name, 
-            score: 0, 
-            joinedAt: firebase.firestore.FieldValue.serverTimestamp() 
+        await gameRef.collection('players').doc(myStudentId).set({
+            name: name,
+            score: 0,
+            joinedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        hidePanel('studentPanel');
-        showPanel('waitingArea');
+        hide('studentPanel');
+        show('waitingArea');
         document.getElementById('studentNameDisplay').innerHTML = name;
         document.getElementById('pinDisplay').innerHTML = pin;
         document.getElementById('scoreDisplay').innerHTML = '0';
         
-        attachStudentListeners();
-        
-    } catch (error) { 
-        document.getElementById('joinErrorMsg').innerHTML = '❌ Failed: ' + error.message;
-    }
-}
-
-function attachStudentListeners() {
-    // Clean up old listeners
-    if (gameUnsubscribe) gameUnsubscribe();
-    if (playersUnsubscribe) playersUnsubscribe();
-    if (questionUnsubscribe) questionUnsubscribe();
-    
-    // Listen to game status
-    gameUnsubscribe = currentGameRef.onSnapshot(doc => {
-        if (!doc.exists) return;
-        const data = doc.data();
-        
-        if (data.status === 'waiting') { 
-            hidePanel('quizAreaStudent'); 
-            showPanel('waitingArea'); 
-            hidePanel('resultsArea'); 
-        } else if (data.status === 'active') { 
-            hidePanel('waitingArea'); 
-            showPanel('quizAreaStudent'); 
-            hidePanel('resultsArea'); 
-        } else if (data.status === 'ended') { 
-            hidePanel('quizAreaStudent'); 
-            hidePanel('waitingArea'); 
-            showStudentFinalResults(); 
-        }
-    });
-    
-    // Listen to active question - THIS IS THE KEY FIX
-    questionUnsubscribe = currentGameRef.collection('activeQuestion').doc('current').onSnapshot(snap => {
-        console.log('Question snapshot received:', snap.exists);
-        
-        if (!snap.exists) {
-            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Waiting for teacher to send a question...</div>';
-            return;
-        }
-        
-        const qData = snap.data();
-        console.log('Question data:', qData);
-        
-        if (!qData.isActive) {
-            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Getting next question ready...</div>';
-            return;
-        }
-        
-        hasAnsweredFlag = false;
-        const question = qData.question;
-        const expiry = qData.expiresAt.toDate();
-        const qIndex = qData.questionIndex;
-        
-        // Render the question
-        renderStudentQuestion(question);
-        
-        // Start timer
-        startStudentTimer(expiry);
-        
-        // Attach answer handler
-        attachAnswerHandler(question, async (answer) => {
-            if (!hasAnsweredFlag) {
-                hasAnsweredFlag = true;
-                await submitStudentAnswer(answer, question, qIndex, expiry);
+        // Listen to game status
+        gameRef.onSnapshot((doc) => {
+            if (!doc.exists) return;
+            const data = doc.data();
+            
+            if (data.status === 'waiting') {
+                hide('quizArea');
+                show('waitingArea');
+                hide('resultsArea');
+            } else if (data.status === 'active') {
+                hide('waitingArea');
+                show('quizArea');
+                hide('resultsArea');
+            } else if (data.status === 'ended') {
+                hide('quizArea');
+                hide('waitingArea');
+                showResults();
             }
         });
-    });
-    
-    // Listen to score
-    const scoreRef = currentGameRef.collection('players').doc(studentId);
-    playersUnsubscribe = scoreRef.onSnapshot(doc => { 
-        if (doc.exists) { 
-            document.getElementById('scoreDisplay').innerHTML = doc.data()?.score || 0;
-        } 
-    });
-}
-
-function renderStudentQuestion(question) {
-    console.log('Rendering question:', question);
-    
-    if (!question) {
-        document.getElementById('questionContainer').innerHTML = '<div class="text-center">❌ Error loading question</div>';
-        return;
-    }
-    
-    if (question.type === 'multiple_choice') {
-        document.getElementById('questionContainer').innerHTML = `
-            <h2 style="margin-bottom: 20px;">${escapeHtml(question.text)}</h2>
-            <div class="options-container">
-                ${question.options.map((opt, i) => `
-                    <div class="option" data-ans="${i}">
-                        ${String.fromCharCode(65+i)}. ${escapeHtml(opt)}
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    } else if (question.type === 'true_false') {
-        document.getElementById('questionContainer').innerHTML = `
-            <h2 style="margin-bottom: 20px;">${escapeHtml(question.text)}</h2>
-            <div class="tf-options">
-                <div class="tf-option true" data-ans="true">✅ TRUE</div>
-                <div class="tf-option false" data-ans="false">❌ FALSE</div>
-            </div>
-        `;
-    } else if (question.type === 'fill_blank') {
-        document.getElementById('questionContainer').innerHTML = `
-            <h2 style="margin-bottom: 20px;">${escapeHtml(question.text)}</h2>
-            <input type="text" id="fillAnswerInput" class="blank-input" placeholder="Type your answer here...">
-            <button id="submitStudentAnswerBtn" class="btn btn-primary">Submit Answer</button>
-        `;
-    } else if (question.type === 'numeric') {
-        document.getElementById('questionContainer').innerHTML = `
-            <h2 style="margin-bottom: 20px;">${escapeHtml(question.text)}</h2>
-            <input type="number" id="numericAnswerInput" class="blank-input" placeholder="Enter your answer...">
-            ${question.unit ? `<p style="color:#718096; margin-top:5px;">Unit: ${escapeHtml(question.unit)}</p>` : ''}
-            <button id="submitStudentAnswerBtn" class="btn btn-primary">Submit Answer</button>
-        `;
-    }
-    
-    document.getElementById('feedbackArea').innerHTML = '';
-}
-
-function attachAnswerHandler(question, handler) {
-    setTimeout(() => {
-        if (question.type === 'multiple_choice') {
-            document.querySelectorAll('.option').forEach(opt => {
-                opt.onclick = () => {
-                    const answer = parseInt(opt.dataset.ans);
-                    console.log('Selected answer:', answer);
-                    handler(answer);
-                };
+        
+        // Listen to active question
+        if (unsubscribeQuestion) unsubscribeQuestion();
+        unsubscribeQuestion = gameRef.collection('activeQuestion').doc('current').onSnapshot((snap) => {
+            if (!snap.exists || !snap.data().isActive) {
+                document.getElementById('questionDisplay').innerHTML = '<div class="text-center">⏳ Waiting for question...</div>';
+                return;
+            }
+            
+            canAnswer = true;
+            const data = snap.data();
+            const q = data.question;
+            const expiry = data.expiresAt.toDate();
+            const qIdx = data.index;
+            
+            renderStudentQuestion(q);
+            startTimer(expiry);
+            
+            attachAnswerListener(q, async (answer) => {
+                if (canAnswer) {
+                    canAnswer = false;
+                    await submitAnswer(answer, q, qIdx, expiry);
+                }
             });
-        } else if (question.type === 'true_false') {
-            document.querySelectorAll('.tf-option').forEach(opt => {
-                opt.onclick = () => {
-                    const answer = opt.dataset.ans === 'true';
-                    console.log('Selected answer:', answer);
-                    handler(answer);
-                };
+        });
+        
+        // Listen to score
+        gameRef.collection('players').doc(myStudentId).onSnapshot((doc) => {
+            if (doc.exists) {
+                document.getElementById('scoreDisplay').innerHTML = doc.data()?.score || 0;
+            }
+        });
+        
+    } catch (err) {
+        document.getElementById('joinError').innerHTML = 'Failed: ' + err.message;
+    }
+}
+
+function renderStudentQuestion(q) {
+    if (q.type === 'mc') {
+        document.getElementById('questionDisplay').innerHTML = `
+            <h2>${escapeHtml(q.text)}</h2>
+            <div class="options">
+                ${q.options.map((opt, i) => `<div class="option" data-ans="${i}">${String.fromCharCode(65+i)}. ${escapeHtml(opt)}</div>`).join('')}
+            </div>
+        `;
+    } else if (q.type === 'tf') {
+        document.getElementById('questionDisplay').innerHTML = `
+            <h2>${escapeHtml(q.text)}</h2>
+            <div class="tf-group">
+                <div class="tf-opt true" data-ans="true">✅ TRUE</div>
+                <div class="tf-opt false" data-ans="false">❌ FALSE</div>
+            </div>
+        `;
+    } else if (q.type === 'fb') {
+        document.getElementById('questionDisplay').innerHTML = `
+            <h2>${escapeHtml(q.text)}</h2>
+            <input type="text" id="fbInput" class="blank-input" placeholder="Your answer">
+            <button id="submitAnsBtn" class="btn btn-primary">Submit</button>
+        `;
+    } else if (q.type === 'num') {
+        document.getElementById('questionDisplay').innerHTML = `
+            <h2>${escapeHtml(q.text)}</h2>
+            <input type="number" id="numInput" class="blank-input" placeholder="Your answer">
+            <button id="submitAnsBtn" class="btn btn-primary">Submit</button>
+        `;
+    }
+    document.getElementById('feedback').innerHTML = '';
+}
+
+function attachAnswerListener(q, handler) {
+    setTimeout(() => {
+        if (q.type === 'mc') {
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.onclick = () => handler(parseInt(opt.dataset.ans));
+            });
+        } else if (q.type === 'tf') {
+            document.querySelectorAll('.tf-opt').forEach(opt => {
+                opt.onclick = () => handler(opt.dataset.ans === 'true');
             });
         } else {
-            const btn = document.getElementById('submitStudentAnswerBtn');
+            const btn = document.getElementById('submitAnsBtn');
             if (btn) {
                 btn.onclick = () => {
-                    const input = document.getElementById(question.type === 'fill_blank' ? 'fillAnswerInput' : 'numericAnswerInput');
-                    let value = input.value;
-                    if (question.type === 'numeric') value = parseFloat(value);
-                    if (value || value === 0) {
-                        console.log('Submitted answer:', value);
-                        handler(value);
-                    } else {
-                        alert('Please enter an answer');
-                    }
+                    const input = document.getElementById(q.type === 'fb' ? 'fbInput' : 'numInput');
+                    let val = input.value;
+                    if (q.type === 'num') val = parseFloat(val);
+                    if (val || val === 0) handler(val);
+                    else alert('Enter answer');
                 };
             }
         }
     }, 100);
 }
 
-function startStudentTimer(expiry) {
-    if (window.studentTimerInterval) clearInterval(window.studentTimerInterval);
-    
-    window.studentTimerInterval = setInterval(() => {
+function startTimer(expiry) {
+    if (window.timerInt) clearInterval(window.timerInt);
+    window.timerInt = setInterval(() => {
         const remaining = Math.max(0, Math.floor((expiry.getTime() - Date.now()) / 1000));
-        const timerDiv = document.getElementById('timerDisplay');
-        if (timerDiv) {
-            timerDiv.innerText = remaining;
-            if (remaining <= 5) {
-                timerDiv.classList.add('timer-warning');
-            } else {
-                timerDiv.classList.remove('timer-warning');
-            }
-        }
-        if (remaining <= 0) {
-            clearInterval(window.studentTimerInterval);
-        }
+        const timerDiv = document.getElementById('timer');
+        timerDiv.innerText = remaining;
+        if (remaining <= 5) timerDiv.classList.add('timer-warning');
+        else timerDiv.classList.remove('timer-warning');
+        if (remaining <= 0) clearInterval(window.timerInt);
     }, 200);
 }
 
-async function submitStudentAnswer(answer, question, qIndex, expiry) {
-    const isCorrect = validateStudentAnswer(question, answer);
+async function submitAnswer(answer, q, qIdx, expiry) {
+    const isCorrect = validateAnswer(q, answer);
     const timeLeft = Math.max(0, (expiry.getTime() - Date.now()) / 1000);
-    const points = calculateStudentPoints(question, timeLeft, isCorrect);
+    const points = calcPoints(q, timeLeft, isCorrect);
     
-    const feedback = document.getElementById('feedbackArea');
+    const feedback = document.getElementById('feedback');
     if (isCorrect) {
         feedback.innerHTML = `<div style="background:#c6f6d5; padding:15px; border-radius:12px;">✅ CORRECT! +${points} points!</div>`;
     } else {
-        feedback.innerHTML = `<div style="background:#fed7d7; padding:15px; border-radius:12px;">❌ Wrong! Correct answer: ${getCorrectAnswerText(question)}</div>`;
+        feedback.innerHTML = `<div style="background:#fed7d7; padding:15px; border-radius:12px;">❌ Wrong! Answer: ${getCorrectAnswer(q)}</div>`;
     }
     
-    try {
-        await currentGameRef.collection('players').doc(studentId).collection('answers').doc(`q${qIndex}`).set({ 
-            answer: answer, 
-            correct: isCorrect, 
-            points: points, 
-            timestamp: firebase.firestore.FieldValue.serverTimestamp() 
-        });
-        
-        const playerDoc = await currentGameRef.collection('players').doc(studentId).get();
-        const newScore = (playerDoc.data()?.score || 0) + points;
-        await currentGameRef.collection('players').doc(studentId).update({ score: newScore });
-        
-        // Disable inputs after answering
-        document.querySelectorAll('.option, .tf-option, #submitStudentAnswerBtn').forEach(el => {
-            if (el.tagName === 'BUTTON') el.disabled = true;
-            else el.style.pointerEvents = 'none';
-        });
-        
-    } catch (error) {
-        console.error('Submit error:', error);
-        feedback.innerHTML = `<div style="background:#fed7d7; padding:15px; border-radius:12px;">❌ Error submitting answer.</div>`;
-        hasAnsweredFlag = false;
-    }
+    await currentGame.collection('players').doc(myStudentId).collection('answers').doc(`q${qIdx}`).set({
+        answer, correct: isCorrect, points, timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    
+    const playerDoc = await currentGame.collection('players').doc(myStudentId).get();
+    const newScore = (playerDoc.data()?.score || 0) + points;
+    await currentGame.collection('players').doc(myStudentId).update({ score: newScore });
+    
+    document.querySelectorAll('.option, .tf-opt, #submitAnsBtn').forEach(el => {
+        if (el.tagName === 'BUTTON') el.disabled = true;
+        else el.style.pointerEvents = 'none';
+    });
 }
 
-function validateStudentAnswer(question, answer) {
-    if (question.type === 'multiple_choice') return answer === question.correctAnswer;
-    if (question.type === 'true_false') return String(answer) === String(question.correctAnswer);
-    if (question.type === 'fill_blank') return String(answer).toLowerCase().trim() === String(question.correctAnswer).toLowerCase();
-    if (question.type === 'numeric') return Math.abs(answer - question.correctAnswer) <= 0.01;
+function validateAnswer(q, a) {
+    if (q.type === 'mc') return a === q.correct;
+    if (q.type === 'tf') return String(a) === String(q.correct);
+    if (q.type === 'fb') return String(a).toLowerCase().trim() === String(q.correct).toLowerCase();
+    if (q.type === 'num') return Math.abs(a - q.correct) <= 0.01;
     return false;
 }
 
-function calculateStudentPoints(question, timeLeft, correct) {
+function calcPoints(q, timeLeft, correct) {
     if (!correct) return 0;
     const bonus = Math.floor((timeLeft / 15) * 50);
-    const multiplier = { easy: 1, medium: 1.5, hard: 2 };
-    return Math.floor((question.points + bonus) * (multiplier[question.difficulty] || 1));
+    const mult = { easy: 1, medium: 1.5, hard: 2 };
+    return Math.floor((q.points + bonus) * (mult[q.difficulty] || 1));
 }
 
-function getCorrectAnswerText(question) {
-    if (question.type === 'multiple_choice') return question.options[question.correctAnswer];
-    if (question.type === 'true_false') return question.correctAnswer ? 'True' : 'False';
-    if (question.type === 'fill_blank') return question.correctAnswer;
-    if (question.type === 'numeric') return `${question.correctAnswer} ${question.unit || ''}`;
+function getCorrectAnswer(q) {
+    if (q.type === 'mc') return q.options[q.correct];
+    if (q.type === 'tf') return q.correct ? 'True' : 'False';
+    if (q.type === 'fb') return q.correct;
+    if (q.type === 'num') return `${q.correct}`;
     return 'Unknown';
 }
 
-async function showStudentFinalResults() {
-    const playersSnap = await currentGameRef.collection('players').orderBy('score', 'desc').get();
-    const players = []; 
-    let rank = 0; 
-    let myScore = 0;
-    
-    playersSnap.forEach((doc, i) => { 
-        const d = doc.data(); 
-        players.push({ name: d.name, score: d.score || 0 }); 
-        if (doc.id === studentId) { 
-            rank = i + 1; 
-            myScore = d.score || 0; 
-        } 
+async function showResults() {
+    const playersSnap = await currentGame.collection('players').orderBy('score', 'desc').get();
+    const players = [];
+    let rank = 0, myScore = 0;
+    playersSnap.forEach((doc, i) => {
+        const d = doc.data();
+        players.push({ name: d.name, score: d.score || 0 });
+        if (doc.id === myStudentId) {
+            rank = i + 1;
+            myScore = d.score || 0;
+        }
     });
     
-    const gameDoc = await currentGameRef.get(); 
-    const totalQ = gameDoc.data()?.questions.length || 0;
+    const gameDoc = await currentGame.get();
+    const total = gameDoc.data()?.questions.length || 0;
     
     document.getElementById('resultsArea').innerHTML = `
-        <div class="card">
-            <div style="font-size:50px; text-align:center;">🏆</div>
-            <h2 style="text-align:center;">Game Over!</h2>
-            <h3 style="text-align:center;">Your Score: ${myScore} / ${totalQ * 100}</h3>
-            <h3 style="text-align:center;">Position: #${rank} of ${players.length}</h3>
-            <hr style="margin: 20px 0;">
+        <div class="card glass text-center">
+            <div style="font-size:50px;">🏆</div>
+            <h2>Game Over!</h2>
+            <h3>Your Score: ${myScore} / ${total * 100}</h3>
+            <h3>Position: #${rank} of ${players.length}</h3>
+            <hr>
             <h3>Final Leaderboard</h3>
-            <div class="leaderboard">
-                ${players.map((p, i) => `
-                    <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}" style="${i+1 === rank ? 'background:#c6f6d5; font-weight:bold;' : ''}">
-                        <span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)}</span>
-                        <span>⭐ ${p.score}</span>
-                    </div>
-                `).join('')}
-            </div>
-            <button id="playAgainButton" class="btn btn-primary mt-20" style="width:100%;">Play Again</button>
+            ${players.map((p, i) => `
+                <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}" style="${i+1 === rank ? 'background:#c6f6d5; font-weight:bold;' : ''}">
+                    <span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)}</span>
+                    <span>⭐ ${p.score}</span>
+                </div>
+            `).join('')}
+            <button id="playAgainBtn" class="btn btn-primary mt-20">Play Again</button>
         </div>
     `;
-    
-    hidePanel('quizAreaStudent'); 
-    showPanel('resultsArea');
-    document.getElementById('playAgainButton')?.addEventListener('click', () => location.reload());
+    hide('quizArea');
+    show('resultsArea');
+    document.getElementById('playAgainBtn')?.onclick = () => location.reload();
 }
 
 // ==================== NAVIGATION ====================
-function showHostScreen() { 
-    hidePanel('landingPage'); 
-    showPanel('hostPanel'); 
-    hidePanel('gameDashboard'); 
-    hidePanel('studentPanel'); 
-    renderQuestionBuilder(); 
-    updateQuestionsDisplay(); 
+function showHost() {
+    hide('landingPage');
+    show('hostPanel');
+    hide('gameDashboard');
+    hide('studentPanel');
+    renderQuestionForm();
+    renderQuestions();
+}
+function showStudent() {
+    hide('landingPage');
+    hide('hostPanel');
+    hide('gameDashboard');
+    show('studentPanel');
+    document.getElementById('studentName').value = '';
+    document.getElementById('gamePinStudent').value = '';
+}
+function backToLanding() {
+    if (unsubscribeGame) unsubscribeGame();
+    if (unsubscribePlayers) unsubscribePlayers();
+    if (unsubscribeQuestion) unsubscribeQuestion();
+    if (gameTimer) clearTimeout(gameTimer);
+    if (window.timerInt) clearInterval(window.timerInt);
+    hide('hostPanel');
+    hide('gameDashboard');
+    hide('studentPanel');
+    show('landingPage');
 }
 
-function showStudentScreen() { 
-    hidePanel('landingPage'); 
-    hidePanel('hostPanel'); 
-    hidePanel('gameDashboard'); 
-    showPanel('studentPanel'); 
-    document.getElementById('studentNameInput').value = ''; 
-    document.getElementById('gamePinInput').value = '';
-    document.getElementById('joinErrorMsg').innerHTML = '';
-    document.getElementById('waitingArea').classList.add('hidden');
-    document.getElementById('quizAreaStudent').classList.add('hidden');
-}
-
-function goBackToLanding() { 
-    if (gameUnsubscribe) gameUnsubscribe(); 
-    if (playersUnsubscribe) playersUnsubscribe(); 
-    if (questionUnsubscribe) questionUnsubscribe(); 
-    if (questionTimer) clearTimeout(questionTimer);
-    if (window.studentTimerInterval) clearInterval(window.studentTimerInterval);
-    
-    hidePanel('hostPanel'); 
-    hidePanel('gameDashboard'); 
-    hidePanel('studentPanel'); 
-    showPanel('landingPage'); 
-}
-
-// ==================== 3D BACKGROUND ====================
-function init3DBackground() {
-    const canvas = document.getElementById('bgCanvas');
-    if (!canvas) return;
-    
-    const scene = new THREE.Scene(); 
+// ==================== 3D NEURAL NETWORK BACKGROUND ====================
+function init3D() {
+    const canvas = document.getElementById('networkCanvas');
+    const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x050510);
+    scene.fog = new THREE.FogExp2(0x050510, 0.0005);
+    
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 5, 25);
+    camera.position.set(0, 5, 28);
+    
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     
-    const earthGeo = new THREE.SphereGeometry(2, 64, 64);
-    const earthMat = new THREE.MeshStandardMaterial({ color: 0x2266aa, emissive: 0x113366, emissiveIntensity: 0.3 });
+    // Earth
+    const earthGeo = new THREE.SphereGeometry(2.2, 128, 128);
+    const earthMat = new THREE.MeshStandardMaterial({ color: 0x2266aa, emissive: 0x113366, emissiveIntensity: 0.4, metalness: 0.3, roughness: 0.5 });
     const earth = new THREE.Mesh(earthGeo, earthMat);
     scene.add(earth);
     
-    const particleCount = 1500;
+    // Particles
+    const particleCount = 2500;
     const particlesGeo = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    
     for (let i = 0; i < particleCount; i++) {
-        const r = 3.5 + Math.random() * 4;
+        const r = 3.5 + Math.random() * 5;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
         positions[i*3] = r * Math.sin(phi) * Math.cos(theta);
-        positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta) * 0.8;
+        positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta) * 0.7;
         positions[i*3+2] = r * Math.cos(phi);
+        
+        const hue = 0.55 + Math.random() * 0.3;
+        const color = new THREE.Color().setHSL(hue, 1, 0.6);
+        colors[i*3] = color.r;
+        colors[i*3+1] = color.g;
+        colors[i*3+2] = color.b;
     }
     particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const particlesMat = new THREE.PointsMaterial({ color: 0x66aaff, size: 0.08, transparent: true, blending: THREE.AdditiveBlending });
-    const particles = new THREE.Points(particlesGeo, particlesMat);
+    particlesGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const particleMat = new THREE.PointsMaterial({ size: 0.08, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending });
+    const particles = new THREE.Points(particlesGeo, particleMat);
     scene.add(particles);
     
-    const ambient = new THREE.AmbientLight(0x111122); 
+    // Lines
+    const linePositions = [];
+    for (let i = 0; i < 3000; i++) {
+        const i1 = Math.floor(Math.random() * particleCount);
+        const i2 = Math.floor(Math.random() * particleCount);
+        if (i1 !== i2) {
+            linePositions.push(positions[i1*3], positions[i1*3+1], positions[i1*3+2]);
+            linePositions.push(positions[i2*3], positions[i2*3+1], positions[i2*3+2]);
+        }
+    }
+    const linesGeo = new THREE.BufferGeometry();
+    linesGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(linePositions), 3));
+    const linesMat = new THREE.LineBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.2 });
+    const lines = new THREE.LineSegments(linesGeo, linesMat);
+    scene.add(lines);
+    
+    // Lights
+    const ambient = new THREE.AmbientLight(0x111122);
     scene.add(ambient);
-    const light = new THREE.PointLight(0x4488ff, 0.5); 
-    light.position.set(2, 3, 4); 
-    scene.add(light);
+    const light1 = new THREE.PointLight(0x4488ff, 0.6);
+    light1.position.set(3, 4, 5);
+    scene.add(light1);
+    const light2 = new THREE.PointLight(0xff44aa, 0.4);
+    light2.position.set(-3, 2, -5);
+    scene.add(light2);
+    
+    let mouseX = 0, mouseY = 0;
+    document.addEventListener('mousemove', (e) => {
+        mouseX = (e.clientX / window.innerWidth - 0.5) * 0.5;
+        mouseY = (e.clientY / window.innerHeight - 0.5) * 0.3;
+    });
     
     let time = 0;
-    function animate() { 
-        requestAnimationFrame(animate); 
-        time += 0.005; 
-        earth.rotation.y = time * 0.1; 
-        particles.rotation.y = time * 0.05; 
-        renderer.render(scene, camera); 
+    function animate() {
+        requestAnimationFrame(animate);
+        time += 0.005;
+        
+        earth.rotation.y = time * 0.1;
+        particles.rotation.y = time * 0.03;
+        particles.rotation.x = Math.sin(time * 0.2) * 0.1;
+        lines.rotation.y = time * 0.02;
+        
+        camera.position.x += (mouseX - camera.position.x) * 0.05;
+        camera.position.y += (mouseY + 5 - camera.position.y) * 0.05;
+        camera.lookAt(0, 0, 0);
+        
+        renderer.render(scene, camera);
     }
     animate();
     
-    window.addEventListener('resize', () => { 
-        camera.aspect = window.innerWidth / window.innerHeight; 
-        camera.updateProjectionMatrix(); 
-        renderer.setSize(window.innerWidth, window.innerHeight); 
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
     });
 }
 
-// ==================== INITIALIZE ====================
+// ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('App starting...');
-    init3DBackground();
+    init3D();
     
-    // Navigation buttons
-    document.getElementById('hostNewGameBtn').onclick = showHostScreen;
-    document.getElementById('joinGameBtn').onclick = showStudentScreen;
-    document.getElementById('backFromHost').onclick = goBackToLanding;
-    document.getElementById('backFromStudent').onclick = goBackToLanding;
-    document.getElementById('exitGameBtn').onclick = goBackToLanding;
+    document.getElementById('hostBtn').onclick = showHost;
+    document.getElementById('studentJoinBtn').onclick = showStudent;
+    document.getElementById('backHostBtn').onclick = backToLanding;
+    document.getElementById('backStudentBtn').onclick = backToLanding;
+    document.getElementById('exitControl').onclick = backToLanding;
     
-    // Host question buttons
-    document.getElementById('addQuestion').onclick = addNewQuestion;
-    document.getElementById('addSample').onclick = addExampleQuestions;
-    document.getElementById('clearAll').onclick = clearAllLocalQuestions;
-    document.getElementById('questionType').onchange = renderQuestionBuilder;
-    document.getElementById('createGame').onclick = createAndLaunchGame;
+    document.getElementById('addQBtn').onclick = addQuestion;
+    document.getElementById('sampleBtn').onclick = addSamples;
+    document.getElementById('clearBtn').onclick = clearQuestions;
+    document.getElementById('qType').onchange = renderQuestionForm;
+    document.getElementById('createGameBtn').onclick = createGame;
     
-    // Host game control buttons
-    document.getElementById('startGameBtn').onclick = startGameHost;
-    document.getElementById('nextQuestionBtn').onclick = sendNextQuestionHost;
-    document.getElementById('endGameBtn').onclick = endGameHost;
+    document.getElementById('startGameControl').onclick = startGame;
+    document.getElementById('nextControl').onclick = nextQuestion;
+    document.getElementById('endControl').onclick = endGame;
     
-    // Student join button
-    document.getElementById('joinGameBtn2').onclick = joinStudentGame;
+    document.getElementById('joinGameControl').onclick = joinGame;
     
-    // Enter key support
-    document.getElementById('gamePinInput')?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinStudentGame();
-    });
-    document.getElementById('studentNameInput')?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinStudentGame();
-    });
-    
-    renderQuestionBuilder();
-    updateQuestionsDisplay();
-    
-    console.log('App ready!');
+    renderQuestionForm();
 });

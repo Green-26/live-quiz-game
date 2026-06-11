@@ -6,24 +6,23 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
     min-height: 100vh;
     padding: 20px;
     position: relative;
+    overflow-x: hidden;
 }
 
-#bgCanvas {
+#networkCanvas {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     z-index: 0;
-    pointer-events: none;
 }
 
 .container {
-    max-width: 1400px;
+    max-width: 1300px;
     margin: 0 auto;
     position: relative;
     z-index: 1;
@@ -40,11 +39,20 @@ header h1 {
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    margin-bottom: 10px;
 }
 
 header p {
     color: rgba(255,255,255,0.7);
+}
+
+.glass {
+    background: rgba(10, 20, 40, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(100, 150, 255, 0.2);
+    border-radius: 20px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
 }
 
 .card {
@@ -52,8 +60,6 @@ header p {
     border-radius: 20px;
     padding: 25px;
     margin-bottom: 20px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    backdrop-filter: blur(10px);
 }
 
 .btn {
@@ -63,80 +69,83 @@ header p {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s ease;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+    transition: all 0.3s;
 }
 
 .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
 .btn-success { background: linear-gradient(135deg, #11998e, #38ef7d); color: white; }
 .btn-warning { background: linear-gradient(135deg, #f093fb, #f5576c); color: white; }
 .btn-danger { background: linear-gradient(135deg, #eb3349, #f45c43); color: white; }
-.btn-secondary { background: linear-gradient(135deg, #4facfe, #00f2fe); color: white; }
+.btn-info { background: linear-gradient(135deg, #4facfe, #00f2fe); color: white; }
+.btn-sm { background: rgba(255,255,255,0.2); color: white; padding: 8px 16px; }
 
-.btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-}
+.btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-block { width: 100%; }
 
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.input-field {
+.input {
     padding: 12px 16px;
     border: 2px solid #e0e0e0;
     border-radius: 12px;
     font-size: 14px;
     width: 100%;
-    transition: all 0.3s;
+    margin-bottom: 15px;
+    background: white;
 }
 
-.input-field:focus {
+.input:focus {
     outline: none;
     border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
 }
 
-.hidden {
-    display: none !important;
-}
-
-.text-center {
-    text-align: center;
-}
-
+.hidden { display: none !important; }
+.text-center { text-align: center; }
+.mt-10 { margin-top: 10px; }
 .mt-20 { margin-top: 20px; }
 
-.two-columns {
+.flex-between {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
 }
 
-.pin-display {
-    font-size: 18px;
-}
-
-.pin-display strong {
-    font-size: 32px;
+.pin-box strong {
+    font-size: 28px;
     letter-spacing: 4px;
     background: #1a1a2e;
     color: #ffd89b;
-    padding: 5px 20px;
-    border-radius: 12px;
+    padding: 5px 15px;
+    border-radius: 10px;
     margin-left: 10px;
 }
 
-.questions-list {
+.q-list {
     max-height: 300px;
     overflow-y: auto;
+    margin-top: 20px;
 }
 
-.question-item {
+.q-item {
     background: #f7fafc;
     padding: 12px;
     margin: 8px 0;
@@ -147,7 +156,7 @@ header p {
     border-left: 4px solid #667eea;
 }
 
-.remove-btn {
+.remove-q {
     background: #f56565;
     color: white;
     border: none;
@@ -156,7 +165,7 @@ header p {
     cursor: pointer;
 }
 
-.options-container {
+.options {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -169,7 +178,7 @@ header p {
     border-radius: 12px;
     padding: 15px 20px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: 0.2s;
 }
 
 .option:hover {
@@ -178,13 +187,13 @@ header p {
     transform: translateX(8px);
 }
 
-.tf-options {
+.tf-group {
     display: flex;
     gap: 20px;
     margin: 20px 0;
 }
 
-.tf-option {
+.tf-opt {
     flex: 1;
     text-align: center;
     padding: 20px;
@@ -196,19 +205,18 @@ header p {
     font-weight: bold;
 }
 
-.tf-option.true { color: #48bb78; }
-.tf-option.false { color: #f56565; }
+.tf-opt.true { color: #48bb78; }
+.tf-opt.false { color: #f56565; }
 
 .blank-input {
     width: 100%;
     padding: 15px;
-    font-size: 16px;
     border: 2px solid #e2e8f0;
     border-radius: 12px;
     margin: 20px 0;
 }
 
-.timer-circle {
+.timer {
     width: 100px;
     height: 100px;
     border-radius: 50%;
@@ -236,30 +244,13 @@ header p {
     display: flex;
     justify-content: space-between;
     padding: 12px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    color: white;
 }
 
 .leaderboard-entry.top1 {
     background: linear-gradient(135deg, #ffd70030, #ffed4e30);
     font-weight: bold;
-    border-radius: 8px;
-}
-
-.player-count {
-    text-align: center;
-    padding: 10px;
-    background: #e2e8f0;
-    border-radius: 10px;
-    font-weight: bold;
-}
-
-.status-message {
-    padding: 15px;
-    background: #e2e8f0;
-    border-radius: 12px;
-    text-align: center;
-    font-weight: bold;
-    font-size: 16px;
 }
 
 .spinner {
@@ -272,15 +263,25 @@ header p {
     to { transform: rotate(360deg); }
 }
 
-.error-message {
+.status {
+    padding: 15px;
+    background: rgba(0,0,0,0.5);
+    border-radius: 12px;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+}
+
+.error {
     color: #f56565;
     text-align: center;
-    padding: 10px;
+    margin-top: 10px;
 }
 
 @media (max-width: 768px) {
-    header h1 { font-size: 24px; }
-    .two-columns { grid-template-columns: 1fr; }
-    .pin-display strong { font-size: 20px; letter-spacing: 2px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .form-row { flex-direction: column; }
+    .btn-group { flex-direction: column; }
     .btn { width: 100%; justify-content: center; }
+    header h1 { font-size: 1.8rem; }
 }
