@@ -21,10 +21,13 @@
                 <h2 style="text-align:center; margin-bottom:20px;">Welcome to SmartQuiz Live</h2>
                 <div class="flex-row" style="justify-content:center;">
                     <button id="teacherDashboardBtn" class="btn btn-primary" style="padding:20px 40px; font-size:18px;">
-                        👨‍🏫 Teacher Dashboard
+                        👨‍🏫 Create Quiz
                     </button>
-                    <button id="studentJoinBtn" class="btn btn-success" style="padding:20px 40px; font-size:18px;">
-                        🎓 Student Join Game
+                    <button id="hostNewGameBtn" class="btn btn-success" style="padding:20px 40px; font-size:18px;">
+                        🎮 Host New Game
+                    </button>
+                    <button id="studentJoinBtn" class="btn btn-secondary" style="padding:20px 40px; font-size:18px;">
+                        🎓 Join Game
                     </button>
                 </div>
             </div>
@@ -84,9 +87,56 @@
             </div>
         </div>
 
+        <!-- ==================== DIRECT HOST GAME (Quick Host) ==================== -->
+        <div id="directHostPanel" class="hidden">
+            <div class="card">
+                <div class="flex-row space-between">
+                    <h2>🎮 Host a New Game</h2>
+                    <button id="backFromDirectHostBtn" class="btn btn-secondary">← Back</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📝 Add Questions for Your Game</h3>
+                <div class="flex-row">
+                    <select id="directQuestionType" class="input-field">
+                        <option value="multiple_choice">📋 Multiple Choice</option>
+                        <option value="true_false">✓ True / False</option>
+                        <option value="fill_blank">✏️ Fill in the Blank</option>
+                        <option value="numeric">🔢 Numeric Answer</option>
+                    </select>
+                    <select id="directDifficulty" class="input-field">
+                        <option value="easy">📘 Easy</option>
+                        <option value="medium">📙 Medium</option>
+                        <option value="hard">📕 Hard</option>
+                    </select>
+                    <select id="directSubject" class="input-field">
+                        <option value="general">🌍 General</option>
+                        <option value="math">📐 Math</option>
+                        <option value="science">🔬 Science</option>
+                        <option value="history">📜 History</option>
+                        <option value="english">📖 English</option>
+                    </select>
+                </div>
+
+                <div id="directQuestionFormContainer" class="mt-20"></div>
+
+                <div class="flex-row mt-20">
+                    <button id="directAddQuestionBtn" class="btn btn-primary">➕ Add Question</button>
+                    <button id="directAddSampleBtn" class="btn btn-secondary">📚 Sample Questions</button>
+                    <button id="directClearQuestionsBtn" class="btn btn-danger">🗑️ Clear All</button>
+                </div>
+
+                <div id="directQuestionsList" class="questions-list mt-20"></div>
+
+                <button id="finalizeHostGameBtn" class="btn btn-success" style="margin-top:20px; width:100%; padding:15px;">
+                    🚀 START GAME NOW
+                </button>
+            </div>
+        </div>
+
         <!-- ==================== ACTIVE GAME DASHBOARD (Host Controls) ==================== -->
         <div id="activeGameDashboard" class="hidden">
-            <!-- Game Header -->
             <div class="card">
                 <div class="flex-row space-between">
                     <div>
@@ -94,39 +144,34 @@
                         <div class="pin-display">🎲 Game PIN: <strong id="gamePinDisplay">------</strong></div>
                     </div>
                     <div class="button-group">
-                        <button id="previewGameBtn" class="btn btn-info">👁️ Preview Questions</button>
+                        <button id="previewGameBtn" class="btn btn-info">👁️ Preview</button>
                         <button id="startGameBtn" class="btn btn-success">▶️ START GAME</button>
-                        <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ NEXT QUESTION</button>
-                        <button id="endGameBtn" class="btn btn-danger" disabled>🏁 END GAME</button>
+                        <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ NEXT</button>
+                        <button id="endGameBtn" class="btn btn-danger" disabled>🏁 END</button>
+                        <button id="exitGameBtn" class="btn btn-secondary">🚪 Exit</button>
                     </div>
                 </div>
             </div>
 
-            <!-- Live Status -->
             <div class="card">
                 <div id="gameStatusMessage" class="status-message">📌 Game created. Click START GAME to begin!</div>
             </div>
 
-            <!-- Current Question Panel -->
             <div class="card" id="currentQuestionPanel">
                 <h3>📢 Current Question</h3>
-                <div id="currentQuestionDisplay">No question active yet. Click NEXT QUESTION to send first question.</div>
+                <div id="currentQuestionDisplay">No question active yet. Click NEXT to start.</div>
             </div>
 
-            <!-- Two Column Layout -->
             <div class="two-columns">
-                <!-- Leaderboard -->
                 <div class="card">
                     <h3>🏆 Live Leaderboard</h3>
                     <div id="leaderboardList" class="leaderboard">Waiting for players...</div>
                     <div id="playerCount" class="player-count"></div>
                 </div>
-
-                <!-- Question Analytics -->
                 <div class="card">
-                    <h3>📊 Question Analytics</h3>
+                    <h3>📊 Analytics</h3>
                     <div id="analyticsDisplay">
-                        <p>No data yet. Start the game to see analytics.</p>
+                        <p>No data yet. Start the game.</p>
                     </div>
                 </div>
             </div>
@@ -199,6 +244,7 @@
     <script src="questions.js"></script>
     <script src="game-host.js"></script>
     <script src="game-player.js"></script>
+    <script src="auth.js"></script>
     <script src="ui.js"></script>
     <script src="app.js"></script>
 </body>
