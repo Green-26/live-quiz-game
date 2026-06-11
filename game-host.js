@@ -1,15 +1,13 @@
 // ==================== HOST FUNCTIONS ====================
-let currentQuestionTimeout = null;
-
-function generatePin() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-}
+let questionTimeout = null;
 
 async function hostNewGame() {
     setLoading('Creating game');
+    
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    
     try {
-        const pin = generatePin();
-        const userCredential = await auth.signInAnonymously();
+        const user = await auth.signInAnonymously();
         const gameRef = db.collection('games').doc(pin);
         
         await gameRef.set({
@@ -17,18 +15,20 @@ async function hostNewGame() {
             status: 'lobby',
             currentQuestionIndex: -1,
             questions: [],
-            hostId: userCredential.user.uid,
+            hostId: user.user.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        currentUser = { uid: userCredential.user.uid, isHost: true, gameId: pin };
+        currentUser = { uid: user.user.uid, isHost: true, gameId: pin };
         currentGameRef = gameRef;
         sessionStorage.setItem('quizUser', JSON.stringify(currentUser));
+        
         switchToHost(pin);
         attachHostListeners(gameRef);
+        
     } catch (error) {
-        console.error('Error:', error);
-        document.getElementById('authError').innerText = 'Failed to create game';
+        console.error(error);
+        document.getElementById('authError').innerText = 'Failed to create game: ' + error.message;
     }
 }
 
@@ -39,39 +39,44 @@ async function attachHostListeners(gameRef) {
     unsubGame = gameRef.onSnapshot(doc => {
         if (!doc.exists) return;
         const data = doc.data();
+        
         document.getElementById('hostPin').innerText = data.pin;
-        currentQuestions = data.questions;
-        renderQuestionsList(data.questions);
+        currentQuestions = data.questions || [];
+        
+        renderQuestionsList(currentQuestions);
         
         const startBtn = document.getElementById('startGameBtn');
         const nextBtn = document.getElementById('nextQuestionBtn');
+        const endBtn = document.getElementById('endGameBtn');
+        const statusDiv = document.getElementById('gameStatusMessage');
         
         if (data.status === 'active') {
-            const total = data.questions.length;
-            const curr = data.currentQuestionIndex;
             startBtn.disabled = true;
-            document.getElementById('endGameBtn').classList.remove('hidden');
+            endBtn.classList.remove('hidden');
             
-            if (curr + 1 < total) {
+            const total = data.questions.length;
+            const current = data.currentQuestionIndex;
+            
+            if (current + 1 < total) {
                 nextBtn.disabled = false;
             } else {
                 nextBtn.disabled = true;
             }
             
-            if (curr >= 0 && curr < total) {
-                document.getElementById('hostGameStatus').innerHTML = `📢 Question ${curr + 1}/${total} is LIVE!`;
+            if (current >= 0) {
+                statusDiv.innerHTML = `📢 Question ${current + 1}/${total} is LIVE!`;
             } else {
-                document.getElementById('hostGameStatus').innerHTML = '🚀 Press Next Question to begin';
+                statusDiv.innerHTML = '🚀 Press Next Question to start';
             }
         } else if (data.status === 'lobby') {
             startBtn.disabled = false;
             nextBtn.disabled = true;
-            document.getElementById('endGameBtn').classList.add('hidden');
-            document.getElementById('hostGameStatus').innerHTML = '📌 Add questions and press Start Game!';
+            endBtn.classList.add('hidden');
+            statusDiv.innerHTML = '📌 Add questions and press Start Game';
         } else if (data.status === 'ended') {
             nextBtn.disabled = true;
             startBtn.disabled = true;
-            document.getElementById('hostGameStatus').innerHTML = '🏁 Game Over!';
+            statusDiv.innerHTML = '🏁 Game Over!';
         }
     });
     
@@ -81,14 +86,14 @@ async function attachHostListeners(gameRef) {
         snapshot.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
         players.sort((a, b) => (b.score || 0) - (a.score || 0));
         
-        const leaderboardDiv = document.getElementById('hostLeaderboard');
+        const container = document.getElementById('leaderboardList');
         if (players.length === 0) {
-            leaderboardDiv.innerHTML = '<div class="leaderboard-entry">Waiting for players...</div>';
+            container.innerHTML = '<div class="leaderboard-entry">Waiting for players...</div>';
         } else {
-            leaderboardDiv.innerHTML = players.map((p, idx) => `
-                <div class="leaderboard-entry ${idx === 0 ? 'top-1' : ''}">
-                    <span>${idx === 0 ? '👑' : `${idx + 1}.`} ${escapeHtml(p.name)}</span>
-                    <span>⭐ ${p.score || 0} pts</span>
+            container.innerHTML = players.map((p, i) => `
+                <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}">
+                    <span>${i === 0 ? '👑' : `${i+1}.`} ${escapeHtml(p.name)}</span>
+                    <span>⭐ ${p.score || 0}</span>
                 </div>
             `).join('');
         }
@@ -96,37 +101,31 @@ async function attachHostListeners(gameRef) {
 }
 
 function renderQuestionsList(questions) {
-    const container = document.getElementById('questionsList');
+    const container = document.getElementById('questionsListContainer');
+    
     if (!questions || questions.length === 0) {
-        container.innerHTML = '<p style="text-align:center; color:#718096;">No questions yet. Add some above!</p>';
+        container.innerHTML = '<p style="text-align:center; color:#718096; padding:20px;">No questions yet. Add some above!</p>';
         return;
     }
     
-    container.innerHTML = questions.map((q, idx) => {
-        let typeClass = 'mc';
-        if (q.type === 'true_false') typeClass = 'tf';
-        else if (q.type === 'fill_blank') typeClass = 'fb';
-        else if (q.type === 'numeric') typeClass = 'numeric';
-        
-        return `
-            <div class="question-item">
-                <div>
-                    <span class="question-type-badge type-${typeClass}">${q.type.replace('_', ' ')}</span>
-                    <strong>Q${idx + 1}:</strong> ${escapeHtml(q.text.substring(0, 50))}
-                    <span style="margin-left: 10px;">🎯 ${q.points} pts</span>
-                </div>
-                <button class="remove-question-btn" data-index="${idx}">✖</button>
+    container.innerHTML = questions.map((q, i) => `
+        <div class="question-item">
+            <div>
+                <span class="question-badge">${q.type.replace('_', ' ')}</span>
+                <strong>Q${i+1}:</strong> ${escapeHtml(q.text.substring(0, 50))}
+                <span style="margin-left:10px;">🎯 ${q.points} pts</span>
             </div>
-        `;
-    }).join('');
+            <button class="remove-btn" data-index="${i}">✖ Remove</button>
+        </div>
+    `).join('');
     
-    document.querySelectorAll('.remove-question-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
+    document.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
             const index = parseInt(btn.dataset.index);
             if (confirm('Remove this question?')) {
-                const questions = currentQuestions;
-                questions.splice(index, 1);
-                await currentGameRef.update({ questions: questions });
+                const newQuestions = [...currentQuestions];
+                newQuestions.splice(index, 1);
+                await currentGameRef.update({ questions: newQuestions });
             }
         });
     });
@@ -138,15 +137,16 @@ async function addQuestion() {
         return;
     }
     
-    setLoading('Adding question');
-    const question = buildQuestionFromForm();
+    const question = buildQuestion();
     if (!question) return;
     
+    setLoading('Adding question');
+    
     try {
-        const questions = [...currentQuestions, question];
-        await currentGameRef.update({ questions: questions });
+        const newQuestions = [...currentQuestions, question];
+        await currentGameRef.update({ questions: newQuestions });
         
-        document.getElementById('qText').value = '';
+        document.getElementById('questionText').value = '';
         if (document.getElementById('opt1')) document.getElementById('opt1').value = '';
         if (document.getElementById('opt2')) document.getElementById('opt2').value = '';
         if (document.getElementById('opt3')) document.getElementById('opt3').value = '';
@@ -154,18 +154,12 @@ async function addQuestion() {
         
         alert('Question added!');
     } catch (error) {
-        console.error('Error:', error);
-        alert('Failed to add question');
+        alert('Failed: ' + error.message);
     }
 }
 
 async function addSampleQuestions() {
-    if (!currentUser?.isHost) {
-        alert('You must be a host');
-        return;
-    }
-    
-    setLoading('Adding samples');
+    if (!currentUser?.isHost) return;
     
     const samples = [
         {
@@ -198,34 +192,40 @@ async function addSampleQuestions() {
             unit: '',
             difficulty: 'easy',
             subject: 'math',
-            points: 75,
-            explanation: '15 + 27 = 42'
+            points: 75
+        },
+        {
+            id: Date.now() + 4,
+            type: 'fill_blank',
+            text: 'Water freezes at ______ degrees Celsius',
+            correctAnswer: '0',
+            difficulty: 'easy',
+            subject: 'science',
+            points: 50
         }
     ];
     
     try {
-        const questions = [...currentQuestions, ...samples];
-        await currentGameRef.update({ questions: questions });
+        const newQuestions = [...currentQuestions, ...samples];
+        await currentGameRef.update({ questions: newQuestions });
         alert(`Added ${samples.length} sample questions!`);
     } catch (error) {
-        console.error('Error:', error);
-        alert('Failed to add samples');
+        alert('Failed: ' + error.message);
     }
 }
 
 async function clearAllQuestions() {
-    if (!confirm('⚠️ Clear ALL questions? This cannot be undone!')) return;
-    setLoading('Clearing questions');
+    if (!confirm('⚠️ Clear ALL questions?')) return;
     try {
         await currentGameRef.update({ questions: [] });
-        alert('All questions cleared!');
+        alert('All questions cleared');
     } catch (error) {
-        alert('Failed to clear');
+        alert('Failed: ' + error.message);
     }
 }
 
 async function previewQuestions() {
-    if (!currentQuestions || currentQuestions.length === 0) {
+    if (!currentQuestions.length) {
         alert('No questions to preview');
         return;
     }
@@ -233,15 +233,13 @@ async function previewQuestions() {
     const modal = document.getElementById('previewModal');
     const content = document.getElementById('previewContent');
     
-    content.innerHTML = currentQuestions.map((q, idx) => `
+    content.innerHTML = currentQuestions.map((q, i) => `
         <div class="preview-question">
-            <h4>Question ${idx + 1}</h4>
+            <h4>Question ${i+1}</h4>
             <p><strong>${escapeHtml(q.text)}</strong></p>
-            <p><strong>Type:</strong> ${q.type.replace('_', ' ')}</p>
-            <p><strong>Difficulty:</strong> ${q.difficulty}</p>
-            <p><strong>Points:</strong> ${q.points}</p>
-            <p class="correct"><strong>Answer:</strong> ${getCorrectAnswerDisplay(q)}</p>
-            ${q.explanation ? `<p><strong>Explanation:</strong> ${escapeHtml(q.explanation)}</p>` : ''}
+            <p>Type: ${q.type.replace('_', ' ')} | Difficulty: ${q.difficulty} | Points: ${q.points}</p>
+            <p style="color:#48bb78;"><strong>✓ Answer:</strong> ${getCorrectAnswerText(q)}</p>
+            ${q.explanation ? `<p>📖 ${escapeHtml(q.explanation)}</p>` : ''}
         </div>
     `).join('');
     
@@ -249,26 +247,27 @@ async function previewQuestions() {
 }
 
 async function startGame() {
+    if (!currentQuestions.length) {
+        alert('Add questions first!');
+        return;
+    }
+    
     setLoading('Starting game');
     try {
-        if (!currentQuestions || currentQuestions.length === 0) {
-            alert('Please add questions first!');
-            return;
-        }
-        
         await currentGameRef.update({ status: 'active', currentQuestionIndex: -1 });
-        document.getElementById('hostGameStatus').innerHTML = '🚀 Game started! Press Next Question.';
         document.getElementById('nextQuestionBtn').disabled = false;
+        document.getElementById('gameStatusMessage').innerHTML = '🚀 Game started! Press Next Question';
     } catch (error) {
-        alert('Failed to start game');
+        alert('Failed: ' + error.message);
     }
 }
 
 async function nextQuestion() {
     setLoading('Loading question');
+    
     try {
-        const snap = await currentGameRef.get();
-        const data = snap.data();
+        const doc = await currentGameRef.get();
+        const data = doc.data();
         
         if (data.status !== 'active') {
             alert('Game not active');
@@ -279,18 +278,17 @@ async function nextQuestion() {
         
         if (nextIdx >= data.questions.length) {
             await currentGameRef.update({ status: 'ended' });
-            document.getElementById('hostGameStatus').innerHTML = '🏁 Game Over!';
             document.getElementById('nextQuestionBtn').disabled = true;
             alert('Quiz completed!');
             return;
         }
         
-        if (currentQuestionTimeout) clearTimeout(currentQuestionTimeout);
+        if (questionTimeout) clearTimeout(questionTimeout);
         
         await currentGameRef.update({ currentQuestionIndex: nextIdx });
         
-        const activeQRef = currentGameRef.collection('activeQuestion').doc('current');
-        await activeQRef.set({
+        const activeRef = currentGameRef.collection('activeQuestion').doc('current');
+        await activeRef.set({
             question: data.questions[nextIdx],
             startedAt: firebase.firestore.FieldValue.serverTimestamp(),
             expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 15000)),
@@ -299,33 +297,30 @@ async function nextQuestion() {
         });
         
         document.getElementById('nextQuestionBtn').disabled = true;
-        document.getElementById('hostGameStatus').innerHTML = `📢 Question ${nextIdx + 1}/${data.questions.length} is LIVE!`;
+        document.getElementById('gameStatusMessage').innerHTML = `📢 Question ${nextIdx + 1}/${data.questions.length} is LIVE!`;
         
-        currentQuestionTimeout = setTimeout(async () => {
+        questionTimeout = setTimeout(async () => {
             const active = await currentGameRef.collection('activeQuestion').doc('current').get();
             if (active.exists && active.data()?.isActive) {
-                await activeQRef.update({ isActive: false });
-                document.getElementById('hostGameStatus').innerHTML = `⏰ Time\'s up for Question ${nextIdx + 1}!`;
+                await activeRef.update({ isActive: false });
+                document.getElementById('gameStatusMessage').innerHTML = `⏰ Time\'s up for Question ${nextIdx + 1}!`;
                 document.getElementById('nextQuestionBtn').disabled = false;
             }
         }, 15000);
         
     } catch (error) {
-        console.error('Error:', error);
-        alert('Failed to load next question');
+        alert('Failed: ' + error.message);
     }
 }
 
 async function endGame() {
     if (confirm('End the game?')) {
-        setLoading('Ending game');
-        if (currentQuestionTimeout) clearTimeout(currentQuestionTimeout);
+        if (questionTimeout) clearTimeout(questionTimeout);
         await currentGameRef.update({ status: 'ended' });
         document.getElementById('nextQuestionBtn').disabled = true;
     }
 }
 
 function closeModal() {
-    const modal = document.getElementById('previewModal');
-    if (modal) modal.classList.add('hidden');
+    document.getElementById('previewModal').classList.add('hidden');
 }

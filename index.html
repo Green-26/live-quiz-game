@@ -3,39 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>🎯 SmartQuiz Live | Loading...</title>
+    <title>🎯 SmartQuiz Live | Real-time Quiz Game</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-        /* 3D Animated Background */
-        body {
-            position: relative;
-            overflow-x: hidden;
-        }
-        
-        #three-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            pointer-events: none;
-        }
-        
-        .container {
-            position: relative;
-            z-index: 1;
-        }
-        
-        .card, .btn, .input-field {
-            backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.95);
-        }
-        
-        .header h1, .subtitle {
-            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }
-    </style>
 </head>
 <body>
     <div id="three-bg"></div>
@@ -46,24 +15,29 @@
             <p class="subtitle">7 Question Types | Real-time Scoring | Live Leaderboard</p>
         </header>
 
-        <div id="authSection" class="auth-section">
+        <!-- Auth Section -->
+        <div id="authSection">
             <div class="card">
                 <div class="flex-row">
-                    <input type="text" id="playerNameInput" placeholder="Your Name" class="input-field" style="flex:2">
-                    <input type="text" id="gamePinInput" placeholder="Game PIN" class="input-field" style="flex:1">
+                    <input type="text" id="playerNameInput" placeholder="Your Name" class="input-field">
+                    <input type="text" id="gamePinInput" placeholder="Game PIN" class="input-field">
                     <button id="joinGameBtn" class="btn btn-primary">👤 Join Game</button>
-                    <button id="hostGameBtn" class="btn btn-secondary">🎮 Host New Game</button>
+                    <button id="hostGameBtn" class="btn btn-success">🎮 Host New Game</button>
                 </div>
-                <div id="authError" class="text-center mt-20" style="color: #f56565;"></div>
+                <div id="authError" class="error-message"></div>
             </div>
         </div>
 
-        <div id="hostPanel" class="panel hidden">
+        <!-- Host Panel -->
+        <div id="hostPanel" class="hidden">
+            <!-- Game Controls -->
             <div class="card">
-                <div class="flex-row" style="justify-content: space-between; align-items: center;">
-                    <div>🎲 Game PIN: <strong id="hostPin" style="font-size: 1.5rem;">------</strong></div>
-                    <div>
-                        <button id="previewQuestionsBtn" class="btn btn-dark">👁️ Preview Questions</button>
+                <div class="flex-row space-between">
+                    <div class="pin-display">
+                        🎲 Game PIN: <strong id="hostPin">------</strong>
+                    </div>
+                    <div class="button-group">
+                        <button id="previewBtn" class="btn btn-info">👁️ Preview</button>
                         <button id="startGameBtn" class="btn btn-success">🚀 Start Game</button>
                         <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ Next</button>
                         <button id="endGameBtn" class="btn btn-danger hidden">🏁 End Game</button>
@@ -71,71 +45,74 @@
                 </div>
             </div>
 
+            <!-- Question Builder -->
             <div class="card">
                 <h3>📝 Question Builder</h3>
-                <div class="flex-row" style="margin-bottom: 15px;">
-                    <select id="questionTypeSelect" class="input-field" style="flex:1">
-                        <option value="multiple_choice">Multiple Choice</option>
-                        <option value="true_false">True / False</option>
-                        <option value="fill_blank">Fill in the Blank</option>
-                        <option value="matching">Matching Pairs</option>
-                        <option value="ordering">Ordering / Sequencing</option>
-                        <option value="numeric">Numeric Answer</option>
+                <div class="flex-row">
+                    <select id="questionType" class="input-field">
+                        <option value="multiple_choice">📋 Multiple Choice</option>
+                        <option value="true_false">✓ True / False</option>
+                        <option value="fill_blank">✏️ Fill in the Blank</option>
+                        <option value="numeric">🔢 Numeric Answer</option>
                     </select>
-                    <select id="difficultySelect" class="input-field" style="flex:1">
+                    <select id="difficulty" class="input-field">
                         <option value="easy">📘 Easy</option>
                         <option value="medium">📙 Medium</option>
                         <option value="hard">📕 Hard</option>
                     </select>
-                    <select id="subjectSelect" class="input-field" style="flex:1">
-                        <option value="general">General Knowledge</option>
-                        <option value="math">Mathematics</option>
-                        <option value="science">Science</option>
-                        <option value="english">English</option>
-                        <option value="history">History</option>
+                    <select id="subject" class="input-field">
+                        <option value="general">🌍 General</option>
+                        <option value="math">📐 Math</option>
+                        <option value="science">🔬 Science</option>
+                        <option value="history">📜 History</option>
+                        <option value="english">📖 English</option>
                     </select>
                 </div>
 
-                <div id="questionForm"></div>
+                <div id="questionFormContainer"></div>
 
                 <div class="flex-row mt-20">
                     <button id="addQuestionBtn" class="btn btn-primary">➕ Add Question</button>
-                    <button id="clearAllQuestionsBtn" class="btn btn-danger">🗑️ Clear All</button>
+                    <button id="addSampleBtn" class="btn btn-secondary">📚 Sample Questions</button>
+                    <button id="clearQuestionsBtn" class="btn btn-danger">🗑️ Clear All</button>
                 </div>
 
-                <div id="questionsList" class="mt-20" style="max-height: 300px; overflow-y: auto;"></div>
+                <div id="questionsListContainer" class="questions-list"></div>
             </div>
 
+            <!-- Leaderboard -->
             <div class="card">
                 <h3>🏆 Live Leaderboard</h3>
-                <div id="hostLeaderboard" class="leaderboard">Waiting for players...</div>
+                <div id="leaderboardList">Waiting for players...</div>
             </div>
 
+            <!-- Game Status -->
             <div class="card">
-                <div id="hostGameStatus">📌 Game in lobby mode. Add questions and press Start!</div>
+                <div id="gameStatusMessage">📌 Add questions and press Start Game</div>
             </div>
         </div>
 
-        <div id="playerPanel" class="panel hidden">
+        <!-- Player Panel -->
+        <div id="playerPanel" class="hidden">
             <div class="card">
-                <div class="flex-row" style="justify-content: space-between;">
-                    <div>👤 <strong id="playerName"></strong></div>
-                    <div>🎲 PIN: <strong id="playerPin"></strong></div>
-                    <div>⭐ Score: <strong id="playerScore">0</strong></div>
+                <div class="flex-row space-between">
+                    <div>👤 <strong id="playerNameDisplay"></strong></div>
+                    <div>🎲 PIN: <strong id="playerPinDisplay"></strong></div>
+                    <div>⭐ Score: <strong id="playerScoreDisplay">0</strong></div>
                 </div>
             </div>
 
             <div id="waitingArea" class="card text-center">
-                <div style="font-size: 3rem;">⏳</div>
+                <div class="waiting-spinner">⏳</div>
                 <h3>Waiting for Host to start...</h3>
                 <p>Get ready for the quiz!</p>
             </div>
 
             <div id="quizArea" class="hidden">
                 <div class="card">
-                    <div id="questionDisplay"></div>
-                    <div class="timer-circle" id="timerDisplay">0</div>
-                    <div id="answerFeedback" class="text-center mt-20"></div>
+                    <div id="questionContainer"></div>
+                    <div class="timer-circle" id="timerCircle">15</div>
+                    <div id="answerFeedback"></div>
                 </div>
             </div>
         </div>
@@ -145,21 +122,23 @@
     <div id="previewModal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>👁️ Question Preview</h2>
-                <button id="closeModalBtn" class="btn btn-danger">&times;</button>
+                <h2>📋 Question Preview</h2>
+                <button id="closeModal" class="modal-close">&times;</button>
             </div>
             <div id="previewContent" class="modal-body"></div>
             <div class="modal-footer">
-                <button id="closeModalFooterBtn" class="btn btn-primary">Close</button>
+                <button id="closeModalBtn" class="btn btn-primary">Close</button>
             </div>
         </div>
     </div>
 
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
+
+    <!-- Game Scripts -->
     <script src="config.js"></script>
     <script src="questions.js"></script>
     <script src="game-host.js"></script>
