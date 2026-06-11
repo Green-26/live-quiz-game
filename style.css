@@ -115,6 +115,7 @@ body {
 
 .space-between {
     justify-content: space-between;
+    align-items: center;
 }
 
 .hidden {
@@ -128,18 +129,25 @@ body {
 .mt-20 { margin-top: 20px; }
 .mb-20 { margin-bottom: 20px; }
 
+/* Two Columns */
+.two-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
 /* PIN Display */
 .pin-display {
     font-size: 18px;
 }
 
 .pin-display strong {
-    font-size: 28px;
-    letter-spacing: 4px;
+    font-size: 32px;
+    letter-spacing: 6px;
     background: #1a1a2e;
     color: #ffd89b;
-    padding: 5px 15px;
-    border-radius: 10px;
+    padding: 5px 20px;
+    border-radius: 12px;
     margin-left: 10px;
 }
 
@@ -152,9 +160,8 @@ body {
 
 /* Questions List */
 .questions-list {
-    max-height: 300px;
+    max-height: 350px;
     overflow-y: auto;
-    margin-top: 20px;
 }
 
 .question-item {
@@ -280,11 +287,54 @@ body {
     justify-content: space-between;
     padding: 12px;
     border-bottom: 1px solid #e2e8f0;
+    font-size: 16px;
 }
 
 .leaderboard-entry.top1 {
-    background: linear-gradient(135deg, #ffd70020, #ffed4e20);
+    background: linear-gradient(135deg, #ffd70030, #ffed4e30);
     font-weight: bold;
+    border-radius: 8px;
+}
+
+.player-count {
+    margin-top: 15px;
+    text-align: center;
+    padding: 10px;
+    background: #e2e8f0;
+    border-radius: 10px;
+    font-weight: bold;
+}
+
+/* Status Message */
+.status-message {
+    padding: 15px;
+    background: #e2e8f0;
+    border-radius: 12px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+/* Current Question Display */
+#currentQuestionDisplay {
+    padding: 15px;
+    background: #f7fafc;
+    border-radius: 12px;
+    margin-top: 10px;
+    font-size: 18px;
+    line-height: 1.5;
+}
+
+/* Analytics */
+#analyticsDisplay {
+    padding: 10px;
+}
+
+.analytics-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 /* Modal */
@@ -350,20 +400,27 @@ body {
     border-left: 4px solid #48bb78;
 }
 
-/* Waiting Spinner */
-.waiting-spinner {
+/* Spinner */
+.spinner {
     font-size: 50px;
     animation: spin 1s linear infinite;
+    display: inline-block;
 }
 
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
 
+/* Feedback */
+.feedback {
+    margin-top: 20px;
+    text-align: center;
+}
+
 .error-message {
     color: #f56565;
     text-align: center;
-    margin-top: 15px;
+    padding: 10px;
 }
 
 /* Responsive */
@@ -372,6 +429,7 @@ body {
     .flex-row { flex-direction: column; }
     .btn { width: 100%; justify-content: center; }
     .button-group { flex-direction: column; }
-    .pin-display strong { font-size: 20px; }
+    .pin-display strong { font-size: 20px; letter-spacing: 3px; }
     .tf-options { flex-direction: column; }
+    .two-columns { grid-template-columns: 1fr; }
 }

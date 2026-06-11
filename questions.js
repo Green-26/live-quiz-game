@@ -1,44 +1,5 @@
-// ==================== QUESTION RENDERERS ====================
-function renderQuestionForPlayer(question) {
-    switch(question.type) {
-        case 'multiple_choice':
-            return `
-                <h2>${escapeHtml(question.text)}</h2>
-                <div class="options-container">
-                    ${question.options.map((opt, i) => `
-                        <div class="option" data-answer="${i}">
-                            ${String.fromCharCode(65+i)}. ${escapeHtml(opt)}
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        case 'true_false':
-            return `
-                <h2>${escapeHtml(question.text)}</h2>
-                <div class="tf-options">
-                    <div class="tf-option true" data-answer="true">✅ TRUE</div>
-                    <div class="tf-option false" data-answer="false">❌ FALSE</div>
-                </div>
-            `;
-        case 'fill_blank':
-            return `
-                <h2>${escapeHtml(question.text)}</h2>
-                <input type="text" id="fillAnswer" class="blank-input" placeholder="Type your answer...">
-                <button id="submitFillBtn" class="btn btn-primary">Submit Answer</button>
-            `;
-        case 'numeric':
-            return `
-                <h2>${escapeHtml(question.text)}</h2>
-                <input type="number" id="numericAnswer" class="blank-input" placeholder="Enter number...">
-                ${question.unit ? `<p>Unit: ${escapeHtml(question.unit)}</p>` : ''}
-                <button id="submitNumericBtn" class="btn btn-primary">Submit Answer</button>
-            `;
-        default:
-            return `<h2>${escapeHtml(question.text)}</h2>`;
-    }
-}
+// ==================== QUESTION FUNCTIONS ====================
 
-// ==================== RENDER QUESTION FORM FOR HOST ====================
 function renderQuestionForm() {
     const type = document.getElementById('questionType').value;
     const container = document.getElementById('questionFormContainer');
@@ -66,9 +27,7 @@ function renderQuestionForm() {
             </select>
         `;
     } else if (type === 'fill_blank') {
-        html += `
-            <input type="text" id="correctAnswer" class="input-field mb-20" placeholder="Correct answer">
-        `;
+        html += `<input type="text" id="correctAnswer" class="input-field mb-20" placeholder="Correct answer">`;
     } else if (type === 'numeric') {
         html += `
             <input type="number" id="correctValue" class="input-field mb-20" placeholder="Correct answer">
@@ -84,7 +43,6 @@ function renderQuestionForm() {
     container.innerHTML = html;
 }
 
-// ==================== BUILD QUESTION FROM FORM ====================
 function buildQuestion() {
     const type = document.getElementById('questionType').value;
     const text = document.getElementById('questionText')?.value.trim();
@@ -144,31 +102,90 @@ function buildQuestion() {
     return question;
 }
 
-// ==================== VALIDATE ANSWER ====================
-function validateAnswer(question, answer) {
-    switch(question.type) {
-        case 'multiple_choice':
-            return answer === question.correctAnswer;
-        case 'true_false':
-            return String(answer) === String(question.correctAnswer);
-        case 'fill_blank':
-            return String(answer).toLowerCase().trim() === String(question.correctAnswer).toLowerCase();
-        case 'numeric':
-            return Math.abs(parseFloat(answer) - question.correctAnswer) <= (question.tolerance || 0);
-        default:
-            return false;
+function renderQuestionsList() {
+    const container = document.getElementById('questionsListContainer');
+    
+    if (!currentQuestions || currentQuestions.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:#718096; padding:20px;">📭 No questions yet. Add some above!</p>';
+        return;
+    }
+    
+    container.innerHTML = currentQuestions.map((q, i) => `
+        <div class="question-item">
+            <div>
+                <span class="question-badge">${q.type.replace('_', ' ')}</span>
+                <strong>Q${i+1}:</strong> ${escapeHtml(q.text.substring(0, 50))}
+                <span style="margin-left:10px;">🎯 ${q.points} pts</span>
+            </div>
+            <button class="remove-btn" data-index="${i}">✖ Remove</button>
+        </div>
+    `).join('');
+    
+    document.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const index = parseInt(btn.dataset.index);
+            if (confirm('Remove this question?')) {
+                currentQuestions.splice(index, 1);
+                renderQuestionsList();
+                saveQuestionsToLocal();
+            }
+        });
+    });
+}
+
+function saveQuestionsToLocal() {
+    localStorage.setItem('teacherQuiz', JSON.stringify(currentQuestions));
+}
+
+function loadQuestionsFromLocal() {
+    const saved = localStorage.getItem('teacherQuiz');
+    if (saved) {
+        currentQuestions = JSON.parse(saved);
+        renderQuestionsList();
     }
 }
 
-// ==================== CALCULATE POINTS ====================
-function calculatePoints(question, timeLeft, isCorrect) {
-    if (!isCorrect) return 0;
-    const bonus = Math.floor((timeLeft / 15) * 50);
-    const multiplier = { easy: 1, medium: 1.5, hard: 2 };
-    return Math.floor((question.points + bonus) * (multiplier[question.difficulty] || 1));
+function addSampleQuestions() {
+    const samples = [
+        { id: Date.now()+1, type: 'multiple_choice', text: 'What is the capital of France?', options: ['London', 'Paris', 'Berlin', 'Madrid'], correctAnswer: 1, difficulty: 'easy', subject: 'geography', points: 100, explanation: 'Paris is the capital of France' },
+        { id: Date.now()+2, type: 'true_false', text: 'The Earth is flat', correctAnswer: false, difficulty: 'easy', subject: 'science', points: 50, explanation: 'The Earth is actually round' },
+        { id: Date.now()+3, type: 'numeric', text: 'What is 15 + 27?', correctAnswer: 42, difficulty: 'easy', subject: 'math', points: 75 },
+        { id: Date.now()+4, type: 'fill_blank', text: 'Water freezes at ______ degrees Celsius', correctAnswer: '0', difficulty: 'easy', subject: 'science', points: 50 }
+    ];
+    
+    currentQuestions.push(...samples);
+    renderQuestionsList();
+    saveQuestionsToLocal();
+    alert(`Added ${samples.length} sample questions!`);
 }
 
-// ==================== GET CORRECT ANSWER TEXT ====================
+function clearAllQuestions() {
+    if (confirm('⚠️ Clear ALL questions?')) {
+        currentQuestions = [];
+        renderQuestionsList();
+        saveQuestionsToLocal();
+        alert('All questions cleared');
+    }
+}
+
+function addQuestion() {
+    const question = buildQuestion();
+    if (!question) return;
+    
+    currentQuestions.push(question);
+    renderQuestionsList();
+    saveQuestionsToLocal();
+    
+    // Clear form
+    document.getElementById('questionText').value = '';
+    if (document.getElementById('opt1')) document.getElementById('opt1').value = '';
+    if (document.getElementById('opt2')) document.getElementById('opt2').value = '';
+    if (document.getElementById('opt3')) document.getElementById('opt3').value = '';
+    if (document.getElementById('opt4')) document.getElementById('opt4').value = '';
+    
+    alert('Question added!');
+}
+
 function getCorrectAnswerText(question) {
     switch(question.type) {
         case 'multiple_choice': return question.options[question.correctAnswer];
@@ -176,5 +193,59 @@ function getCorrectAnswerText(question) {
         case 'fill_blank': return question.correctAnswer;
         case 'numeric': return `${question.correctAnswer} ${question.unit || ''}`;
         default: return 'Unknown';
+    }
+}
+
+function validateAnswer(question, answer) {
+    switch(question.type) {
+        case 'multiple_choice': return answer === question.correctAnswer;
+        case 'true_false': return String(answer) === String(question.correctAnswer);
+        case 'fill_blank': return String(answer).toLowerCase().trim() === String(question.correctAnswer).toLowerCase();
+        case 'numeric': return Math.abs(parseFloat(answer) - question.correctAnswer) <= (question.tolerance || 0);
+        default: return false;
+    }
+}
+
+function calculatePoints(question, timeLeft, isCorrect) {
+    if (!isCorrect) return 0;
+    const bonus = Math.floor((timeLeft / 15) * 50);
+    const multiplier = { easy: 1, medium: 1.5, hard: 2 };
+    return Math.floor((question.points + bonus) * (multiplier[question.difficulty] || 1));
+}
+
+function renderQuestionForPlayer(question) {
+    switch(question.type) {
+        case 'multiple_choice':
+            return `
+                <h2>${escapeHtml(question.text)}</h2>
+                <div class="options-container">
+                    ${question.options.map((opt, i) => `
+                        <div class="option" data-answer="${i}">${String.fromCharCode(65+i)}. ${escapeHtml(opt)}</div>
+                    `).join('')}
+                </div>
+            `;
+        case 'true_false':
+            return `
+                <h2>${escapeHtml(question.text)}</h2>
+                <div class="tf-options">
+                    <div class="tf-option true" data-answer="true">✅ TRUE</div>
+                    <div class="tf-option false" data-answer="false">❌ FALSE</div>
+                </div>
+            `;
+        case 'fill_blank':
+            return `
+                <h2>${escapeHtml(question.text)}</h2>
+                <input type="text" id="fillAnswer" class="blank-input" placeholder="Type your answer...">
+                <button id="submitAnswerBtn" class="btn btn-primary">Submit Answer</button>
+            `;
+        case 'numeric':
+            return `
+                <h2>${escapeHtml(question.text)}</h2>
+                <input type="number" id="numericAnswer" class="blank-input" placeholder="Enter number...">
+                ${question.unit ? `<p>Unit: ${escapeHtml(question.unit)}</p>` : ''}
+                <button id="submitAnswerBtn" class="btn btn-primary">Submit Answer</button>
+            `;
+        default:
+            return `<h2>${escapeHtml(question.text)}</h2>`;
     }
 }

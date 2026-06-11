@@ -1,13 +1,14 @@
 // ==================== PLAYER FUNCTIONS ====================
-let hasAnsweredCurrent = false;
+let playerGameRef = null;
 let playerId = null;
+let hasAnsweredCurrent = false;
 
-async function joinGame() {
-    const name = document.getElementById('playerNameInput').value.trim();
+async function joinGameAsStudent() {
+    const name = document.getElementById('studentNameInput').value.trim();
     const pin = document.getElementById('gamePinInput').value.trim();
     
     if (!name || !pin) {
-        document.getElementById('authError').innerText = 'Enter name and PIN';
+        document.getElementById('joinError').innerText = 'Please enter your name and game PIN';
         return;
     }
     
@@ -18,12 +19,19 @@ async function joinGame() {
         const gameDoc = await gameRef.get();
         
         if (!gameDoc.exists) {
-            document.getElementById('authError').innerText = 'Game not found!';
+            document.getElementById('joinError').innerText = 'Game not found! Check the PIN.';
+            return;
+        }
+        
+        const gameData = gameDoc.data();
+        if (gameData.status === 'ended') {
+            document.getElementById('joinError').innerText = 'This game has already ended.';
             return;
         }
         
         const user = await auth.signInAnonymously();
         playerId = user.user.uid;
+        playerGameRef = gameRef;
         
         await gameRef.collection('players').doc(playerId).set({
             name: name,
@@ -31,19 +39,20 @@ async function joinGame() {
             joinedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        currentUser = { uid: playerId, isHost: false, gameId: pin, playerName: name };
-        sessionStorage.setItem('quizUser', JSON.stringify(currentUser));
+        document.getElementById('studentJoinPage').classList.add('hidden');
+        document.getElementById('studentWaitingArea').classList.remove('hidden');
+        document.getElementById('studentNameDisplay').innerText = name;
+        document.getElementById('studentPinDisplay').innerText = pin;
         
-        switchToPlayer(pin, name);
-        attachPlayerListeners(gameRef);
+        attachStudentListeners(gameRef);
         
     } catch (error) {
         console.error(error);
-        document.getElementById('authError').innerText = 'Failed to join: ' + error.message;
+        document.getElementById('joinError').innerText = 'Failed to join: ' + error.message;
     }
 }
 
-async function attachPlayerListeners(gameRef) {
+function attachStudentListeners(gameRef) {
     if (unsubGame) unsubGame();
     if (activeQuestionListener) activeQuestionListener();
     
@@ -51,22 +60,24 @@ async function attachPlayerListeners(gameRef) {
         if (!doc.exists) return;
         const data = doc.data();
         
-        if (data.status === 'lobby') {
-            document.getElementById('waitingArea').classList.remove('hidden');
-            document.getElementById('quizArea').classList.add('hidden');
+        if (data.status === 'created') {
+            document.getElementById('studentWaitingArea').classList.remove('hidden');
+            document.getElementById('studentQuizArea').classList.add('hidden');
+            document.getElementById('studentResultsArea').classList.add('hidden');
         } else if (data.status === 'active') {
-            document.getElementById('waitingArea').classList.add('hidden');
-            document.getElementById('quizArea').classList.remove('hidden');
+            document.getElementById('studentWaitingArea').classList.add('hidden');
+            document.getElementById('studentQuizArea').classList.remove('hidden');
+            document.getElementById('studentResultsArea').classList.add('hidden');
         } else if (data.status === 'ended') {
-            document.getElementById('quizArea').classList.add('hidden');
-            showGameResults(gameRef);
+            document.getElementById('studentQuizArea').classList.add('hidden');
+            showStudentResults(gameRef);
         }
     });
     
     const activeRef = gameRef.collection('activeQuestion').doc('current');
     activeQuestionListener = activeRef.onSnapshot(async (snap) => {
         if (!snap.exists || !snap.data().isActive) {
-            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Getting next question...</div>';
+            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Waiting for next question...</div>';
             return;
         }
         
@@ -77,27 +88,30 @@ async function attachPlayerListeners(gameRef) {
         const qIndex = data.questionIndex;
         
         document.getElementById('questionContainer').innerHTML = renderQuestionForPlayer(question);
-        startTimer(expiresAt);
+        startStudentTimer(expiresAt);
         
         const answerHandler = async (answer) => {
-            if (hasAnsweredCurrent) return;
+            if (hasAnsweredCurrent) {
+                document.getElementById('answerFeedback').innerHTML = '<p style="color:#ed8936;">Already answered!</p>';
+                return;
+            }
             hasAnsweredCurrent = true;
-            await submitAnswer(gameRef, answer, question, qIndex, expiresAt);
+            await submitStudentAnswer(gameRef, answer, question, qIndex, expiresAt);
         };
         
-        attachAnswerListeners(question, answerHandler);
+        attachStudentAnswerListeners(question, answerHandler);
     });
     
     const scoreRef = gameRef.collection('players').doc(playerId);
     if (unsubPlayers) unsubPlayers();
     unsubPlayers = scoreRef.onSnapshot(doc => {
         if (doc.exists) {
-            document.getElementById('playerScoreDisplay').innerText = doc.data()?.score || 0;
+            document.getElementById('studentScoreDisplay').innerText = doc.data()?.score || 0;
         }
     });
 }
 
-function attachAnswerListeners(question, handler) {
+function attachStudentAnswerListeners(question, handler) {
     if (question.type === 'multiple_choice') {
         document.querySelectorAll('.option').forEach(opt => {
             opt.onclick = () => handler(parseInt(opt.dataset.answer));
@@ -106,22 +120,23 @@ function attachAnswerListeners(question, handler) {
         document.querySelectorAll('.tf-option').forEach(opt => {
             opt.onclick = () => handler(opt.dataset.answer === 'true');
         });
-    } else if (question.type === 'fill_blank') {
-        const btn = document.getElementById('submitFillBtn');
-        if (btn) btn.onclick = () => handler(document.getElementById('fillAnswer').value);
-    } else if (question.type === 'numeric') {
-        const btn = document.getElementById('submitNumericBtn');
-        if (btn) btn.onclick = () => handler(parseFloat(document.getElementById('numericAnswer').value));
+    } else {
+        const btn = document.getElementById('submitAnswerBtn');
+        if (btn) {
+            btn.onclick = () => {
+                const input = document.getElementById(question.type === 'fill_blank' ? 'fillAnswer' : 'numericAnswer');
+                const value = question.type === 'numeric' ? parseFloat(input.value) : input.value;
+                if (value || value === 0) handler(value);
+                else alert('Please enter an answer');
+            };
+        }
     }
 }
 
-async function submitAnswer(gameRef, answer, question, qIndex, expiresAt) {
+async function submitStudentAnswer(gameRef, answer, question, qIndex, expiresAt) {
     try {
         const existing = await gameRef.collection('players').doc(playerId).collection('answers').doc(`q${qIndex}`).get();
-        if (existing.exists) {
-            document.getElementById('answerFeedback').innerHTML = '<p style="color:#ed8936;">Already answered!</p>';
-            return;
-        }
+        if (existing.exists) return;
         
         const isCorrect = validateAnswer(question, answer);
         const timeLeft = Math.max(0, (expiresAt.getTime() - Date.now()) / 1000);
@@ -146,7 +161,7 @@ async function submitAnswer(gameRef, answer, question, qIndex, expiresAt) {
         await gameRef.collection('players').doc(playerId).update({ score: newScore });
         
         // Disable inputs
-        document.querySelectorAll('.option, .tf-option, button').forEach(el => {
+        document.querySelectorAll('.option, .tf-option, #submitAnswerBtn').forEach(el => {
             if (el.tagName === 'BUTTON') el.disabled = true;
             else el.style.pointerEvents = 'none';
         });
@@ -158,7 +173,7 @@ async function submitAnswer(gameRef, answer, question, qIndex, expiresAt) {
     }
 }
 
-function startTimer(expiresAt) {
+function startStudentTimer(expiresAt) {
     if (window.timerInterval) clearInterval(window.timerInterval);
     
     window.timerInterval = setInterval(() => {
@@ -166,17 +181,14 @@ function startTimer(expiresAt) {
         const timer = document.getElementById('timerCircle');
         timer.innerText = remaining;
         
-        if (remaining <= 5) {
-            timer.classList.add('timer-warning');
-        } else {
-            timer.classList.remove('timer-warning');
-        }
+        if (remaining <= 5) timer.classList.add('timer-warning');
+        else timer.classList.remove('timer-warning');
         
         if (remaining <= 0) clearInterval(window.timerInterval);
     }, 200);
 }
 
-async function showGameResults(gameRef) {
+async function showStudentResults(gameRef) {
     const playersSnap = await gameRef.collection('players').orderBy('score', 'desc').get();
     const players = [];
     let rank = 0;
@@ -205,7 +217,7 @@ async function showGameResults(gameRef) {
             <h3>Final Leaderboard</h3>
             <div class="leaderboard">
                 ${players.map((p, i) => `
-                    <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}">
+                    <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}" style="${i+1 === rank ? 'background:#c6f6d5; font-weight:bold;' : ''}">
                         <span>${i === 0 ? '👑' : `${i+1}.`} ${escapeHtml(p.name)}</span>
                         <span>⭐ ${p.score}</span>
                     </div>
@@ -215,13 +227,9 @@ async function showGameResults(gameRef) {
         </div>
     `;
     
-    const oldResults = document.getElementById('gameResults');
-    if (oldResults) oldResults.remove();
-    
-    const resultsDiv = document.createElement('div');
-    resultsDiv.id = 'gameResults';
-    resultsDiv.innerHTML = resultsHtml;
-    document.getElementById('playerPanel').appendChild(resultsDiv);
+    document.getElementById('studentQuizArea').classList.add('hidden');
+    document.getElementById('studentResultsArea').classList.remove('hidden');
+    document.getElementById('studentResultsArea').innerHTML = resultsHtml;
     
     document.getElementById('playAgainBtn')?.addEventListener('click', () => location.reload());
 }

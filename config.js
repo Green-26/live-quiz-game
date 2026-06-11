@@ -1,6 +1,5 @@
-// =================================== FIREBASE CONFIGURATION ===================================
-// REPLACE WITH YOUR REAL FIREBASE PROJECT CONFIGURATION
-
+// ==================== FIREBASE CONFIG ====================
+// REPLACE WITH YOUR FIREBASE PROJECT CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyBNZHd8475afKLV2Wvl9qVcjUOpnJyokws",
   authDomain: "live-quiz-game-26.firebaseapp.com",
@@ -13,12 +12,33 @@ const firebaseConfig = {
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
-
-// Export Firebase services
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-// Global state
-let currentUser = null;
+// Global Variables
 let currentGameRef = null;
+let currentQuestions = [];
+let currentGamePin = null;
 let unsubGame = null;
+let unsubPlayers = null;
+let activeQuestionListener = null;
+let currentQuestionTimeout = null;
+
+// Helper Functions
+function setLoading(message) {
+    document.title = `🔄 ${message}...`;
+    setTimeout(() => {
+        if (document.title.includes('🔄')) {
+            document.title = '🎯 SmartQuiz Live';
+        }
+    }, 2000);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+console.log('✅ Config loaded');

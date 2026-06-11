@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>🎯 SmartQuiz Live | Real-time Quiz Game</title>
+    <title>🎯 SmartQuiz Live | Teacher Dashboard</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,42 +12,36 @@
     <div class="container">
         <header class="header">
             <h1>🎯 SmartQuiz Live Arena</h1>
-            <p class="subtitle">7 Question Types | Real-time Scoring | Live Leaderboard</p>
+            <p class="subtitle">Create Quiz | Host Game | Real-time Scoring</p>
         </header>
 
-        <!-- Auth Section -->
-        <div id="authSection">
+        <!-- ==================== LANDING PAGE ==================== -->
+        <div id="landingPage">
             <div class="card">
-                <div class="flex-row">
-                    <input type="text" id="playerNameInput" placeholder="Your Name" class="input-field">
-                    <input type="text" id="gamePinInput" placeholder="Game PIN" class="input-field">
-                    <button id="joinGameBtn" class="btn btn-primary">👤 Join Game</button>
-                    <button id="hostGameBtn" class="btn btn-success">🎮 Host New Game</button>
+                <h2 style="text-align:center; margin-bottom:20px;">Welcome to SmartQuiz Live</h2>
+                <div class="flex-row" style="justify-content:center;">
+                    <button id="teacherDashboardBtn" class="btn btn-primary" style="padding:20px 40px; font-size:18px;">
+                        👨‍🏫 Teacher Dashboard
+                    </button>
+                    <button id="studentJoinBtn" class="btn btn-success" style="padding:20px 40px; font-size:18px;">
+                        🎓 Student Join Game
+                    </button>
                 </div>
-                <div id="authError" class="error-message"></div>
             </div>
         </div>
 
-        <!-- Host Panel -->
-        <div id="hostPanel" class="hidden">
-            <!-- Game Controls -->
+        <!-- ==================== TEACHER DASHBOARD (Quiz Creator) ==================== -->
+        <div id="teacherDashboard" class="hidden">
             <div class="card">
                 <div class="flex-row space-between">
-                    <div class="pin-display">
-                        🎲 Game PIN: <strong id="hostPin">------</strong>
-                    </div>
-                    <div class="button-group">
-                        <button id="previewBtn" class="btn btn-info">👁️ Preview</button>
-                        <button id="startGameBtn" class="btn btn-success">🚀 Start Game</button>
-                        <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ Next</button>
-                        <button id="endGameBtn" class="btn btn-danger hidden">🏁 End Game</button>
-                    </div>
+                    <h2>📝 Create Your Quiz</h2>
+                    <button id="backToLandingBtn" class="btn btn-secondary">← Back</button>
                 </div>
             </div>
 
             <!-- Question Builder -->
             <div class="card">
-                <h3>📝 Question Builder</h3>
+                <h3>✏️ Question Builder</h3>
                 <div class="flex-row">
                     <select id="questionType" class="input-field">
                         <option value="multiple_choice">📋 Multiple Choice</option>
@@ -62,14 +56,14 @@
                     </select>
                     <select id="subject" class="input-field">
                         <option value="general">🌍 General</option>
-                        <option value="math">📐 Math</option>
+                        <option value="math">📐 Mathematics</option>
                         <option value="science">🔬 Science</option>
                         <option value="history">📜 History</option>
                         <option value="english">📖 English</option>
                     </select>
                 </div>
 
-                <div id="questionFormContainer"></div>
+                <div id="questionFormContainer" class="mt-20"></div>
 
                 <div class="flex-row mt-20">
                     <button id="addQuestionBtn" class="btn btn-primary">➕ Add Question</button>
@@ -77,44 +71,107 @@
                     <button id="clearQuestionsBtn" class="btn btn-danger">🗑️ Clear All</button>
                 </div>
 
-                <div id="questionsListContainer" class="questions-list"></div>
+                <div id="questionsListContainer" class="questions-list mt-20"></div>
             </div>
 
-            <!-- Leaderboard -->
-            <div class="card">
-                <h3>🏆 Live Leaderboard</h3>
-                <div id="leaderboardList">Waiting for players...</div>
-            </div>
-
-            <!-- Game Status -->
-            <div class="card">
-                <div id="gameStatusMessage">📌 Add questions and press Start Game</div>
+            <!-- Host Game Section -->
+            <div class="card" style="background: linear-gradient(135deg, #667eea20, #764ba220);">
+                <h3>🎮 Host a Live Game</h3>
+                <p>When you're ready, click below to create a game session with your questions</p>
+                <button id="createGameAndHostBtn" class="btn btn-success" style="margin-top:15px; padding:15px 30px; font-size:16px;">
+                    🚀 CREATE GAME & HOST NOW
+                </button>
             </div>
         </div>
 
-        <!-- Player Panel -->
-        <div id="playerPanel" class="hidden">
+        <!-- ==================== ACTIVE GAME DASHBOARD (Host Controls) ==================== -->
+        <div id="activeGameDashboard" class="hidden">
+            <!-- Game Header -->
             <div class="card">
                 <div class="flex-row space-between">
-                    <div>👤 <strong id="playerNameDisplay"></strong></div>
-                    <div>🎲 PIN: <strong id="playerPinDisplay"></strong></div>
-                    <div>⭐ Score: <strong id="playerScoreDisplay">0</strong></div>
+                    <div>
+                        <span style="font-size:14px; color:#718096;">ACTIVE GAME</span>
+                        <div class="pin-display">🎲 Game PIN: <strong id="gamePinDisplay">------</strong></div>
+                    </div>
+                    <div class="button-group">
+                        <button id="previewGameBtn" class="btn btn-info">👁️ Preview Questions</button>
+                        <button id="startGameBtn" class="btn btn-success">▶️ START GAME</button>
+                        <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ NEXT QUESTION</button>
+                        <button id="endGameBtn" class="btn btn-danger" disabled>🏁 END GAME</button>
+                    </div>
                 </div>
             </div>
 
-            <div id="waitingArea" class="card text-center">
-                <div class="waiting-spinner">⏳</div>
-                <h3>Waiting for Host to start...</h3>
+            <!-- Live Status -->
+            <div class="card">
+                <div id="gameStatusMessage" class="status-message">📌 Game created. Click START GAME to begin!</div>
+            </div>
+
+            <!-- Current Question Panel -->
+            <div class="card" id="currentQuestionPanel">
+                <h3>📢 Current Question</h3>
+                <div id="currentQuestionDisplay">No question active yet. Click NEXT QUESTION to send first question.</div>
+            </div>
+
+            <!-- Two Column Layout -->
+            <div class="two-columns">
+                <!-- Leaderboard -->
+                <div class="card">
+                    <h3>🏆 Live Leaderboard</h3>
+                    <div id="leaderboardList" class="leaderboard">Waiting for players...</div>
+                    <div id="playerCount" class="player-count"></div>
+                </div>
+
+                <!-- Question Analytics -->
+                <div class="card">
+                    <h3>📊 Question Analytics</h3>
+                    <div id="analyticsDisplay">
+                        <p>No data yet. Start the game to see analytics.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== STUDENT JOIN PAGE ==================== -->
+        <div id="studentJoinPage" class="hidden">
+            <div class="card">
+                <div class="flex-row space-between">
+                    <h2>🎓 Join a Live Game</h2>
+                    <button id="backToLandingFromStudentBtn" class="btn btn-secondary">← Back</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="flex-row">
+                    <input type="text" id="studentNameInput" class="input-field" placeholder="Enter your name" style="flex:2">
+                    <input type="text" id="gamePinInput" class="input-field" placeholder="Enter Game PIN" style="flex:1">
+                    <button id="joinGameBtn" class="btn btn-primary">🎮 Join Game</button>
+                </div>
+                <div id="joinError" class="error-message mt-20"></div>
+            </div>
+
+            <div id="studentWaitingArea" class="card text-center hidden">
+                <div class="spinner">⏳</div>
+                <h3>Waiting for Teacher to start...</h3>
                 <p>Get ready for the quiz!</p>
             </div>
 
-            <div id="quizArea" class="hidden">
+            <div id="studentQuizArea" class="hidden">
+                <div class="card">
+                    <div class="flex-row space-between">
+                        <div>👤 <strong id="studentNameDisplay"></strong></div>
+                        <div>🎲 PIN: <strong id="studentPinDisplay"></strong></div>
+                        <div>⭐ Score: <strong id="studentScoreDisplay">0</strong></div>
+                    </div>
+                </div>
                 <div class="card">
                     <div id="questionContainer"></div>
                     <div class="timer-circle" id="timerCircle">15</div>
-                    <div id="answerFeedback"></div>
+                    <div id="answerFeedback" class="feedback"></div>
                 </div>
             </div>
+
+            <div id="studentResultsArea" class="hidden"></div>
         </div>
     </div>
 
@@ -122,7 +179,7 @@
     <div id="previewModal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>📋 Question Preview</h2>
+                <h2>📋 Quiz Preview</h2>
                 <button id="closeModal" class="modal-close">&times;</button>
             </div>
             <div id="previewContent" class="modal-body"></div>
@@ -132,18 +189,17 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- Scripts -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-    <!-- Game Scripts -->
     <script src="config.js"></script>
     <script src="questions.js"></script>
     <script src="game-host.js"></script>
     <script src="game-player.js"></script>
-    <script src="auth.js"></script>
+    <script src="ui.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
