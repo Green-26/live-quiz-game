@@ -4,7 +4,11 @@ let localQuestions = [];
 let isHost = false;
 let studentId = null;
 let currentGameRef = null;
-let activeQuestionInterval = null;
+let gameUnsubscribe = null;
+let playersUnsubscribe = null;
+let questionUnsubscribe = null;
+let hasAnsweredFlag = false;
+let questionTimer = null;
 
 // ==================== UI FUNCTIONS ====================
 function showPanel(id) { 
@@ -234,6 +238,7 @@ async function sendNextQuestionHost() {
         return;
     }
     
+    // Update question index
     await currentGameRef.update({ currentQuestionIndex: nextIdx });
     
     // Create active question
@@ -249,8 +254,8 @@ async function sendNextQuestionHost() {
     document.getElementById('nextQuestionBtn').disabled = true;
     document.getElementById('gameStatusMsg').innerHTML = `📢 Question ${nextIdx+1}/${data.questions.length} LIVE!`;
     
-    // Auto close after 15 seconds
-    setTimeout(async () => {
+    if (questionTimer) clearTimeout(questionTimer);
+    questionTimer = setTimeout(async () => {
         const active = await currentGameRef.collection('activeQuestion').doc('current').get();
         if (active.exists && active.data()?.isActive) {
             await activeRef.update({ isActive: false });
@@ -263,6 +268,7 @@ async function sendNextQuestionHost() {
 async function endGameHost() {
     if (!currentGameRef) return;
     if (confirm('End the game?')) {
+        if (questionTimer) clearTimeout(questionTimer);
         await currentGameRef.update({ status: 'ended' });
         document.getElementById('nextQuestionBtn').disabled = true;
         document.getElementById('startGameBtn').disabled = true;
@@ -310,127 +316,83 @@ async function joinStudentGame() {
         document.getElementById('pinDisplay').innerHTML = pin;
         document.getElementById('scoreDisplay').innerHTML = '0';
         
-        // Listen to game status
-        gameRef.onSnapshot((doc) => {
-            if (!doc.exists) return;
-            const data = doc.data();
-            
-            if (data.status === 'waiting') { 
-                hidePanel('quizAreaStudent'); 
-                showPanel('waitingArea'); 
-                hidePanel('resultsArea'); 
-            } else if (data.status === 'active') { 
-                hidePanel('waitingArea'); 
-                showPanel('quizAreaStudent'); 
-                hidePanel('resultsArea');
-                
-                // Start listening for active question when game becomes active
-                startListeningForQuestions();
-            } else if (data.status === 'ended') { 
-                hidePanel('quizAreaStudent'); 
-                hidePanel('waitingArea'); 
-                showStudentFinalResults(); 
-            }
-        });
-        
-        // Listen to score updates
-        gameRef.collection('players').doc(studentId).onSnapshot((doc) => { 
-            if (doc.exists) { 
-                const score = doc.data()?.score || 0;
-                document.getElementById('scoreDisplay').innerHTML = score;
-            } 
-        });
+        attachStudentListeners();
         
     } catch (error) { 
         document.getElementById('joinErrorMsg').innerHTML = '❌ Failed: ' + error.message;
     }
 }
 
-function startListeningForQuestions() {
-    console.log('Started listening for questions...');
+function attachStudentListeners() {
+    // Clean up old listeners
+    if (gameUnsubscribe) gameUnsubscribe();
+    if (playersUnsubscribe) playersUnsubscribe();
+    if (questionUnsubscribe) questionUnsubscribe();
     
-    // Clear any existing interval
-    if (activeQuestionInterval) {
-        clearInterval(activeQuestionInterval);
-    }
-    
-    // Function to check for active question
-    const checkActiveQuestion = async () => {
-        if (!currentGameRef) return;
+    // Listen to game status
+    gameUnsubscribe = currentGameRef.onSnapshot(doc => {
+        if (!doc.exists) return;
+        const data = doc.data();
         
-        try {
-            const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
-            
-            if (activeDoc.exists) {
-                const questionData = activeDoc.data();
-                console.log('Found active question:', questionData);
-                
-                if (questionData.isActive && questionData.question) {
-                    // Stop polling once we have an active question
-                    if (activeQuestionInterval) {
-                        clearInterval(activeQuestionInterval);
-                        activeQuestionInterval = null;
-                    }
-                    
-                    hasAnsweredFlag = false;
-                    const question = questionData.question;
-                    const expiry = questionData.expiresAt.toDate();
-                    const qIndex = questionData.questionIndex;
-                    
-                    renderStudentQuestion(question);
-                    startStudentTimer(expiry);
-                    
-                    // Attach answer handler
-                    attachAnswerHandler(question, async (answer) => {
-                        if (!hasAnsweredFlag) {
-                            hasAnsweredFlag = true;
-                            await submitStudentAnswer(answer, question, qIndex, expiry);
-                        }
-                    });
-                }
-            } else {
-                document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Waiting for teacher to send a question...</div>';
-            }
-        } catch (error) {
-            console.error('Error checking question:', error);
+        if (data.status === 'waiting') { 
+            hidePanel('quizAreaStudent'); 
+            showPanel('waitingArea'); 
+            hidePanel('resultsArea'); 
+        } else if (data.status === 'active') { 
+            hidePanel('waitingArea'); 
+            showPanel('quizAreaStudent'); 
+            hidePanel('resultsArea'); 
+        } else if (data.status === 'ended') { 
+            hidePanel('quizAreaStudent'); 
+            hidePanel('waitingArea'); 
+            showStudentFinalResults(); 
         }
-    };
+    });
     
-    // Check immediately
-    checkActiveQuestion();
-    
-    // Also listen for real-time updates
-    if (currentGameRef) {
-        const questionListener = currentGameRef.collection('activeQuestion').doc('current').onSnapshot((snap) => {
-            if (snap.exists && snap.data().isActive) {
-                const questionData = snap.data();
-                console.log('Real-time question update:', questionData);
-                
-                if (questionData.isActive && questionData.question) {
-                    hasAnsweredFlag = false;
-                    const question = questionData.question;
-                    const expiry = questionData.expiresAt.toDate();
-                    const qIndex = questionData.questionIndex;
-                    
-                    renderStudentQuestion(question);
-                    startStudentTimer(expiry);
-                    
-                    attachAnswerHandler(question, async (answer) => {
-                        if (!hasAnsweredFlag) {
-                            hasAnsweredFlag = true;
-                            await submitStudentAnswer(answer, question, qIndex, expiry);
-                        }
-                    });
-                }
+    // Listen to active question - THIS IS THE KEY FIX
+    questionUnsubscribe = currentGameRef.collection('activeQuestion').doc('current').onSnapshot(snap => {
+        console.log('Question snapshot received:', snap.exists);
+        
+        if (!snap.exists) {
+            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Waiting for teacher to send a question...</div>';
+            return;
+        }
+        
+        const qData = snap.data();
+        console.log('Question data:', qData);
+        
+        if (!qData.isActive) {
+            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Getting next question ready...</div>';
+            return;
+        }
+        
+        hasAnsweredFlag = false;
+        const question = qData.question;
+        const expiry = qData.expiresAt.toDate();
+        const qIndex = qData.questionIndex;
+        
+        // Render the question
+        renderStudentQuestion(question);
+        
+        // Start timer
+        startStudentTimer(expiry);
+        
+        // Attach answer handler
+        attachAnswerHandler(question, async (answer) => {
+            if (!hasAnsweredFlag) {
+                hasAnsweredFlag = true;
+                await submitStudentAnswer(answer, question, qIndex, expiry);
             }
         });
-        
-        // Store for cleanup
-        window.questionListener = questionListener;
-    }
+    });
     
-    // Poll every 2 seconds as backup
-    activeQuestionInterval = setInterval(checkActiveQuestion, 2000);
+    // Listen to score
+    const scoreRef = currentGameRef.collection('players').doc(studentId);
+    playersUnsubscribe = scoreRef.onSnapshot(doc => { 
+        if (doc.exists) { 
+            document.getElementById('scoreDisplay').innerHTML = doc.data()?.score || 0;
+        } 
+    });
 }
 
 function renderStudentQuestion(question) {
@@ -514,8 +476,6 @@ function attachAnswerHandler(question, handler) {
         }
     }, 100);
 }
-
-let hasAnsweredFlag = false;
 
 function startStudentTimer(expiry) {
     if (window.studentTimerInterval) clearInterval(window.studentTimerInterval);
@@ -660,30 +620,14 @@ function showStudentScreen() {
     document.getElementById('joinErrorMsg').innerHTML = '';
     document.getElementById('waitingArea').classList.add('hidden');
     document.getElementById('quizAreaStudent').classList.add('hidden');
-    
-    // Clean up any existing intervals
-    if (activeQuestionInterval) {
-        clearInterval(activeQuestionInterval);
-        activeQuestionInterval = null;
-    }
-    if (window.questionListener) {
-        window.questionListener();
-        window.questionListener = null;
-    }
 }
 
 function goBackToLanding() { 
-    if (activeQuestionInterval) {
-        clearInterval(activeQuestionInterval);
-        activeQuestionInterval = null;
-    }
-    if (window.questionListener) {
-        window.questionListener();
-        window.questionListener = null;
-    }
-    if (window.studentTimerInterval) {
-        clearInterval(window.studentTimerInterval);
-    }
+    if (gameUnsubscribe) gameUnsubscribe(); 
+    if (playersUnsubscribe) playersUnsubscribe(); 
+    if (questionUnsubscribe) questionUnsubscribe(); 
+    if (questionTimer) clearTimeout(questionTimer);
+    if (window.studentTimerInterval) clearInterval(window.studentTimerInterval);
     
     hidePanel('hostPanel'); 
     hidePanel('gameDashboard'); 
