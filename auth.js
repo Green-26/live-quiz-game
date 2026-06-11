@@ -1,21 +1,41 @@
 // ==================== UI SWITCH FUNCTIONS ====================
 function switchToHost(pin) {
-    document.getElementById('authSection').classList.add('hidden');
-    document.getElementById('hostPanel').classList.remove('hidden');
-    document.getElementById('playerPanel').classList.add('hidden');
-    document.getElementById('hostPin').innerText = pin;
+    const authSection = document.getElementById('authSection');
+    const hostPanel = document.getElementById('hostPanel');
+    const playerPanel = document.getElementById('playerPanel');
+    
+    if (authSection) authSection.classList.add('hidden');
+    if (hostPanel) {
+        hostPanel.classList.remove('hidden');
+        hostPanel.style.display = 'block';
+    }
+    if (playerPanel) playerPanel.classList.add('hidden');
+    
+    const hostPin = document.getElementById('hostPin');
+    if (hostPin) hostPin.innerText = pin;
+    
     renderQuestionForm();
 }
 
 function switchToPlayer(pin, name) {
-    document.getElementById('authSection').classList.add('hidden');
-    document.getElementById('hostPanel').classList.add('hidden');
-    document.getElementById('playerPanel').classList.remove('hidden');
-    document.getElementById('playerName').innerText = name;
-    document.getElementById('playerPin').innerText = pin;
-    document.getElementById('playerScore').innerText = '0';
-    document.getElementById('waitingArea').classList.remove('hidden');
-    document.getElementById('quizArea').classList.add('hidden');
+    const authSection = document.getElementById('authSection');
+    const hostPanel = document.getElementById('hostPanel');
+    const playerPanel = document.getElementById('playerPanel');
+    
+    if (authSection) authSection.classList.add('hidden');
+    if (hostPanel) hostPanel.classList.add('hidden');
+    if (playerPanel) {
+        playerPanel.classList.remove('hidden');
+        playerPanel.style.display = 'block';
+    }
+    
+    const playerNameSpan = document.getElementById('playerName');
+    const playerPinSpan = document.getElementById('playerPin');
+    const playerScoreSpan = document.getElementById('playerScore');
+    
+    if (playerNameSpan) playerNameSpan.innerText = name;
+    if (playerPinSpan) playerPinSpan.innerText = pin;
+    if (playerScoreSpan) playerScoreSpan.innerText = '0';
 }
 
 // ==================== SESSION RESTORATION ====================
@@ -42,21 +62,7 @@ async function restoreSession() {
             return true;
         }
     } catch (error) {
-        console.error('Error restoring session:', error);
+        console.error('Restore error:', error);
     }
-    
     return false;
-}
-
-// ==================== LOGOUT ====================
-async function logout() {
-    if (confirm('Are you sure you want to logout?')) {
-        sessionStorage.removeItem('quizUser');
-        if (unsubGame) unsubGame();
-        if (unsubPlayers) unsubPlayers();
-        if (activeQuestionListener) activeQuestionListener();
-        if (activeTimeout) clearTimeout(activeTimeout);
-        
-        window.location.reload();
-    }
 }

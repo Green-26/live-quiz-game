@@ -1,15 +1,6 @@
 // ==================== HOST FUNCTIONS ====================
 let currentQuestionTimeout = null;
 
-function setLoading(title) {
-    document.title = `🔄 ${title}... | SmartQuiz Live`;
-    setTimeout(() => {
-        if (!document.title.includes('Loading')) {
-            document.title = '🎯 SmartQuiz Live | Multi-Question Type Game';
-        }
-    }, 1000);
-}
-
 function generatePin() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -36,8 +27,8 @@ async function hostNewGame() {
         switchToHost(pin);
         attachHostListeners(gameRef);
     } catch (error) {
-        console.error('Error creating game:', error);
-        document.getElementById('authError').innerText = 'Failed to create game. Please try again.';
+        console.error('Error:', error);
+        document.getElementById('authError').innerText = 'Failed to create game';
     }
 }
 
@@ -50,7 +41,6 @@ async function attachHostListeners(gameRef) {
         const data = doc.data();
         document.getElementById('hostPin').innerText = data.pin;
         currentQuestions = data.questions;
-        
         renderQuestionsList(data.questions);
         
         const startBtn = document.getElementById('startGameBtn');
@@ -59,19 +49,19 @@ async function attachHostListeners(gameRef) {
         if (data.status === 'active') {
             const total = data.questions.length;
             const curr = data.currentQuestionIndex;
+            startBtn.disabled = true;
+            document.getElementById('endGameBtn').classList.remove('hidden');
             
-            if (curr + 1 < total && !data.waitingForNext) {
+            if (curr + 1 < total) {
                 nextBtn.disabled = false;
             } else {
                 nextBtn.disabled = true;
             }
-            startBtn.disabled = true;
-            document.getElementById('endGameBtn').classList.remove('hidden');
             
             if (curr >= 0 && curr < total) {
                 document.getElementById('hostGameStatus').innerHTML = `📢 Question ${curr + 1}/${total} is LIVE!`;
             } else {
-                document.getElementById('hostGameStatus').innerHTML = '🚀 Game started! Press "Next Question" to begin.';
+                document.getElementById('hostGameStatus').innerHTML = '🚀 Press Next Question to begin';
             }
         } else if (data.status === 'lobby') {
             startBtn.disabled = false;
@@ -93,7 +83,7 @@ async function attachHostListeners(gameRef) {
         
         const leaderboardDiv = document.getElementById('hostLeaderboard');
         if (players.length === 0) {
-            leaderboardDiv.innerHTML = '<div class="leaderboard-entry">Waiting for players to join...</div>';
+            leaderboardDiv.innerHTML = '<div class="leaderboard-entry">Waiting for players...</div>';
         } else {
             leaderboardDiv.innerHTML = players.map((p, idx) => `
                 <div class="leaderboard-entry ${idx === 0 ? 'top-1' : ''}">
@@ -106,57 +96,45 @@ async function attachHostListeners(gameRef) {
 }
 
 function renderQuestionsList(questions) {
-    const questionsDiv = document.getElementById('questionsList');
+    const container = document.getElementById('questionsList');
     if (!questions || questions.length === 0) {
-        questionsDiv.innerHTML = '<p style="color: #718096; text-align: center;">No questions added yet. Build your quiz above!</p>';
+        container.innerHTML = '<p style="text-align:center; color:#718096;">No questions yet. Add some above!</p>';
         return;
     }
     
-    questionsDiv.innerHTML = questions.map((q, idx) => {
+    container.innerHTML = questions.map((q, idx) => {
         let typeClass = 'mc';
         if (q.type === 'true_false') typeClass = 'tf';
         else if (q.type === 'fill_blank') typeClass = 'fb';
-        else if (q.type === 'matching') typeClass = 'match';
-        else if (q.type === 'ordering') typeClass = 'order';
         else if (q.type === 'numeric') typeClass = 'numeric';
         
         return `
-            <div style="background: #f7fafc; padding: 10px; margin: 8px 0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 1;">
+            <div class="question-item">
+                <div>
                     <span class="question-type-badge type-${typeClass}">${q.type.replace('_', ' ')}</span>
-                    <strong>Q${idx + 1}:</strong> ${escapeHtml(q.text.substring(0, 60))}${q.text.length > 60 ? '...' : ''}
-                    <span style="margin-left: 10px;">🎯 ${q.points} pts | 📚 ${q.subject}</span>
+                    <strong>Q${idx + 1}:</strong> ${escapeHtml(q.text.substring(0, 50))}
+                    <span style="margin-left: 10px;">🎯 ${q.points} pts</span>
                 </div>
-                <button class="btn-remove-question btn-danger" data-index="${idx}" style="padding: 5px 10px; font-size: 0.8rem;">❌</button>
+                <button class="remove-question-btn" data-index="${idx}">✖</button>
             </div>
         `;
     }).join('');
     
-    document.querySelectorAll('.btn-remove-question').forEach(btn => {
+    document.querySelectorAll('.remove-question-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const index = parseInt(btn.dataset.index);
-            await removeQuestion(index);
+            if (confirm('Remove this question?')) {
+                const questions = currentQuestions;
+                questions.splice(index, 1);
+                await currentGameRef.update({ questions: questions });
+            }
         });
     });
 }
 
-async function removeQuestion(index) {
-    if (!confirm('Remove this question?')) return;
-    setLoading('Removing question');
-    try {
-        const gameDoc = await currentGameRef.get();
-        const questions = gameDoc.data()?.questions || [];
-        questions.splice(index, 1);
-        await currentGameRef.update({ questions: questions });
-    } catch (error) {
-        console.error('Error removing question:', error);
-        alert('Failed to remove question');
-    }
-}
-
 async function addQuestion() {
     if (!currentUser?.isHost) {
-        alert('You must be a host to add questions');
+        alert('You must be a host');
         return;
     }
     
@@ -165,12 +143,8 @@ async function addQuestion() {
     if (!question) return;
     
     try {
-        const gameDoc = await currentGameRef.get();
-        const questions = gameDoc.data()?.questions || [];
-        
-        await currentGameRef.update({
-            questions: [...questions, question]
-        });
+        const questions = [...currentQuestions, question];
+        await currentGameRef.update({ questions: questions });
         
         document.getElementById('qText').value = '';
         if (document.getElementById('opt1')) document.getElementById('opt1').value = '';
@@ -178,10 +152,64 @@ async function addQuestion() {
         if (document.getElementById('opt3')) document.getElementById('opt3').value = '';
         if (document.getElementById('opt4')) document.getElementById('opt4').value = '';
         
-        alert('Question added successfully!');
+        alert('Question added!');
     } catch (error) {
-        console.error('Error adding question:', error);
-        alert('Failed to add question. Please try again.');
+        console.error('Error:', error);
+        alert('Failed to add question');
+    }
+}
+
+async function addSampleQuestions() {
+    if (!currentUser?.isHost) {
+        alert('You must be a host');
+        return;
+    }
+    
+    setLoading('Adding samples');
+    
+    const samples = [
+        {
+            id: Date.now() + 1,
+            type: 'multiple_choice',
+            text: 'What is the capital of France?',
+            options: ['London', 'Paris', 'Berlin', 'Madrid'],
+            correctAnswer: 1,
+            difficulty: 'easy',
+            subject: 'geography',
+            points: 100,
+            explanation: 'Paris is the capital of France'
+        },
+        {
+            id: Date.now() + 2,
+            type: 'true_false',
+            text: 'The Earth is flat',
+            correctAnswer: false,
+            difficulty: 'easy',
+            subject: 'science',
+            points: 50,
+            explanation: 'The Earth is actually round'
+        },
+        {
+            id: Date.now() + 3,
+            type: 'numeric',
+            text: 'What is 15 + 27?',
+            correctAnswer: 42,
+            tolerance: 0,
+            unit: '',
+            difficulty: 'easy',
+            subject: 'math',
+            points: 75,
+            explanation: '15 + 27 = 42'
+        }
+    ];
+    
+    try {
+        const questions = [...currentQuestions, ...samples];
+        await currentGameRef.update({ questions: questions });
+        alert(`Added ${samples.length} sample questions!`);
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to add samples');
     }
 }
 
@@ -192,33 +220,27 @@ async function clearAllQuestions() {
         await currentGameRef.update({ questions: [] });
         alert('All questions cleared!');
     } catch (error) {
-        console.error('Error clearing questions:', error);
-        alert('Failed to clear questions');
+        alert('Failed to clear');
     }
 }
 
 async function previewQuestions() {
-    const gameDoc = await currentGameRef.get();
-    const questions = gameDoc.data()?.questions || [];
-    
-    if (questions.length === 0) {
-        alert('No questions to preview. Add some questions first!');
+    if (!currentQuestions || currentQuestions.length === 0) {
+        alert('No questions to preview');
         return;
     }
     
     const modal = document.getElementById('previewModal');
-    const previewContent = document.getElementById('previewContent');
+    const content = document.getElementById('previewContent');
     
-    previewContent.innerHTML = questions.map((q, idx) => `
+    content.innerHTML = currentQuestions.map((q, idx) => `
         <div class="preview-question">
             <h4>Question ${idx + 1}</h4>
             <p><strong>${escapeHtml(q.text)}</strong></p>
             <p><strong>Type:</strong> ${q.type.replace('_', ' ')}</p>
             <p><strong>Difficulty:</strong> ${q.difficulty}</p>
             <p><strong>Points:</strong> ${q.points}</p>
-            <div class="correct-answer">
-                <strong>Correct Answer:</strong> ${getPreviewAnswer(q)}
-            </div>
+            <p class="correct"><strong>Answer:</strong> ${getCorrectAnswerDisplay(q)}</p>
             ${q.explanation ? `<p><strong>Explanation:</strong> ${escapeHtml(q.explanation)}</p>` : ''}
         </div>
     `).join('');
@@ -226,76 +248,50 @@ async function previewQuestions() {
     modal.classList.remove('hidden');
 }
 
-function getPreviewAnswer(question) {
-    switch(question.type) {
-        case 'multiple_choice':
-            return question.options[question.correctAnswer];
-        case 'true_false':
-            return question.correctAnswer ? 'True' : 'False';
-        case 'fill_blank':
-            return question.correctAnswer;
-        case 'numeric':
-            return `${question.correctAnswer} ${question.unit || ''}`;
-        case 'matching':
-            return question.leftItems.map((l, i) => `${l} → ${question.rightItems[i]}`).join(', ');
-        case 'ordering':
-            return question.items.join(' → ');
-        default:
-            return 'Check question configuration';
-    }
-}
-
 async function startGame() {
     setLoading('Starting game');
     try {
-        const snap = await currentGameRef.get();
-        const questions = snap.data()?.questions;
-        
-        if (!questions || questions.length === 0) {
-            alert('Please add at least one question first!');
+        if (!currentQuestions || currentQuestions.length === 0) {
+            alert('Please add questions first!');
             return;
         }
         
-        await currentGameRef.update({ status: 'active', currentQuestionIndex: -1, waitingForNext: true });
-        document.getElementById('hostGameStatus').innerHTML = '🚀 Game started! Press "Next Question" to begin.';
+        await currentGameRef.update({ status: 'active', currentQuestionIndex: -1 });
+        document.getElementById('hostGameStatus').innerHTML = '🚀 Game started! Press Next Question.';
         document.getElementById('nextQuestionBtn').disabled = false;
     } catch (error) {
-        console.error('Error starting game:', error);
-        alert('Failed to start game. Please try again.');
+        alert('Failed to start game');
     }
 }
 
 async function nextQuestion() {
-    setLoading('Loading next question');
+    setLoading('Loading question');
     try {
         const snap = await currentGameRef.get();
         const data = snap.data();
         
         if (data.status !== 'active') {
-            alert('Game is not active. Please start the game first.');
+            alert('Game not active');
             return;
         }
         
         let nextIdx = (data.currentQuestionIndex || -1) + 1;
-        const questions = data.questions;
         
-        if (nextIdx >= questions.length) {
+        if (nextIdx >= data.questions.length) {
             await currentGameRef.update({ status: 'ended' });
-            document.getElementById('hostGameStatus').innerHTML = '🏁 Game Over! Great job everyone!';
+            document.getElementById('hostGameStatus').innerHTML = '🏁 Game Over!';
             document.getElementById('nextQuestionBtn').disabled = true;
-            alert('Quiz completed! Game has ended.');
+            alert('Quiz completed!');
             return;
         }
         
-        if (currentQuestionTimeout) {
-            clearTimeout(currentQuestionTimeout);
-        }
+        if (currentQuestionTimeout) clearTimeout(currentQuestionTimeout);
         
-        await currentGameRef.update({ currentQuestionIndex: nextIdx, waitingForNext: false });
+        await currentGameRef.update({ currentQuestionIndex: nextIdx });
         
         const activeQRef = currentGameRef.collection('activeQuestion').doc('current');
         await activeQRef.set({
-            question: questions[nextIdx],
+            question: data.questions[nextIdx],
             startedAt: firebase.firestore.FieldValue.serverTimestamp(),
             expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 15000)),
             isActive: true,
@@ -303,51 +299,33 @@ async function nextQuestion() {
         });
         
         document.getElementById('nextQuestionBtn').disabled = true;
-        document.getElementById('hostGameStatus').innerHTML = `📢 Question ${nextIdx + 1}/${questions.length} is LIVE!`;
+        document.getElementById('hostGameStatus').innerHTML = `📢 Question ${nextIdx + 1}/${data.questions.length} is LIVE!`;
         
         currentQuestionTimeout = setTimeout(async () => {
-            const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
-            if (activeDoc.exists && activeDoc.data()?.isActive) {
-                await currentGameRef.collection('activeQuestion').doc('current').update({ isActive: false });
-                document.getElementById('hostGameStatus').innerHTML = `⏰ Time\'s up for Question ${nextIdx + 1}! Click Next to continue.`;
+            const active = await currentGameRef.collection('activeQuestion').doc('current').get();
+            if (active.exists && active.data()?.isActive) {
+                await activeQRef.update({ isActive: false });
+                document.getElementById('hostGameStatus').innerHTML = `⏰ Time\'s up for Question ${nextIdx + 1}!`;
                 document.getElementById('nextQuestionBtn').disabled = false;
             }
         }, 15000);
         
     } catch (error) {
-        console.error('Error loading next question:', error);
-        alert('Failed to load next question. Please try again.');
+        console.error('Error:', error);
+        alert('Failed to load next question');
     }
 }
 
 async function endGame() {
-    if (confirm('Are you sure you want to end the game?')) {
+    if (confirm('End the game?')) {
         setLoading('Ending game');
-        if (currentQuestionTimeout) {
-            clearTimeout(currentQuestionTimeout);
-        }
+        if (currentQuestionTimeout) clearTimeout(currentQuestionTimeout);
         await currentGameRef.update({ status: 'ended' });
-        document.getElementById('hostGameStatus').innerHTML = '🏁 Game ended by host.';
         document.getElementById('nextQuestionBtn').disabled = true;
     }
 }
 
-// Modal close functions
 function closeModal() {
     const modal = document.getElementById('previewModal');
-    modal.classList.add('hidden');
+    if (modal) modal.classList.add('hidden');
 }
-
-// Clear all questions button
-document.addEventListener('DOMContentLoaded', () => {
-    const clearBtn = document.getElementById('clearAllQuestionsBtn');
-    if (clearBtn) clearBtn.addEventListener('click', clearAllQuestions);
-    
-    const previewBtn = document.getElementById('previewQuestionsBtn');
-    if (previewBtn) previewBtn.addEventListener('click', previewQuestions);
-    
-    const closeModalBtn = document.getElementById('closeModalBtn');
-    const closeModalFooterBtn = document.getElementById('closeModalFooterBtn');
-    if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
-    if (closeModalFooterBtn) closeModalFooterBtn.addEventListener('click', closeModal);
-});
