@@ -1,10 +1,12 @@
-// ==================== HOST FUNCTIONS - FIREBASE CONNECTED ====================
+// ==================== HOST FUNCTIONS - FIXED ====================
 
-// DIRECT HOST - Create game immediately with questions
+let currentQuestionIndex = -1;
+let totalQuestions = 0;
+
 async function directHostNewGame(questions) {
     if (!questions || questions.length === 0) {
         alert('Please add some questions first!');
-        return null;
+        return { success: false };
     }
     
     setLoading('Creating game');
@@ -12,15 +14,15 @@ async function directHostNewGame(questions) {
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
     currentGamePin = pin;
     currentQuestions = questions;
+    currentQuestionIndex = -1;
+    totalQuestions = questions.length;
     
     try {
-        // Sign in anonymously to Firebase
         const userCredential = await auth.signInAnonymously();
         currentHostId = userCredential.user.uid;
         
         const gameRef = db.collection('games').doc(pin);
         
-        // Create game document in Firestore
         await gameRef.set({
             pin: pin,
             status: 'created',
@@ -32,7 +34,6 @@ async function directHostNewGame(questions) {
         
         currentGameRef = gameRef;
         
-        // Save session to localStorage
         sessionStorage.setItem('activeGameSession', JSON.stringify({
             pin: pin,
             isHost: true,
@@ -46,25 +47,19 @@ async function directHostNewGame(questions) {
     } catch (error) {
         console.error('❌ Firebase error:', error);
         alert('Failed to create game: ' + error.message);
-        return { success: false, error: error.message };
+        return { success: false };
     }
 }
 
-// Attach real-time listeners to game
 async function attachGameListeners(gameRef) {
-    // Clean up existing listeners
     if (unsubGame) unsubGame();
     if (unsubPlayers) unsubPlayers();
     
-    // Listen to game state changes from Firebase
     unsubGame = gameRef.onSnapshot(doc => {
-        if (!doc.exists) {
-            console.log('Game document not found');
-            return;
-        }
+        if (!doc.exists) return;
         
         const data = doc.data();
-        console.log('Game update:', data.status, 'Question:', data.currentQuestionIndex + 1);
+        console.log('Game update:', data.status, 'Question index:', data.currentQuestionIndex);
         
         const startBtn = document.getElementById('startGameBtn');
         const nextBtn = document.getElementById('nextQuestionBtn');
@@ -75,14 +70,15 @@ async function attachGameListeners(gameRef) {
         if (data.status === 'active') {
             if (startBtn) {
                 startBtn.disabled = true;
-                startBtn.textContent = '✓ GAME ACTIVE';
+                startBtn.textContent = '✓ ACTIVE';
             }
             if (endBtn) endBtn.disabled = false;
             
-            const total = data.questions.length;
             const current = data.currentQuestionIndex;
+            const total = data.questions.length;
             
-            if (current + 1 < total) {
+            // Enable next button only if there are more questions AND not waiting for answers
+            if (current + 1 < total && !data.waitingForNext) {
                 if (nextBtn) nextBtn.disabled = false;
             } else {
                 if (nextBtn) nextBtn.disabled = true;
@@ -99,8 +95,9 @@ async function attachGameListeners(gameRef) {
                 }
                 if (statusDiv) statusDiv.innerHTML = `📢 Question ${current + 1}/${total} is LIVE! Students answering...`;
             } else {
-                if (currentQDiv) currentQDiv.innerHTML = 'Press NEXT QUESTION to start';
-                if (statusDiv) statusDiv.innerHTML = '🚀 Game active! Press NEXT QUESTION to begin.';
+                if (currentQDiv) currentQDiv.innerHTML = 'Ready to start. Click NEXT QUESTION.';
+                if (statusDiv) statusDiv.innerHTML = '🚀 Game active! Click NEXT QUESTION to begin.';
+                if (nextBtn) nextBtn.disabled = false;
             }
         } else if (data.status === 'created') {
             if (startBtn) {
@@ -120,7 +117,6 @@ async function attachGameListeners(gameRef) {
         }
     });
     
-    // Listen to players collection in real-time from Firebase
     const playersRef = gameRef.collection('players');
     unsubPlayers = playersRef.onSnapshot(snapshot => {
         const players = [];
@@ -147,27 +143,10 @@ async function attachGameListeners(gameRef) {
             if (countDisplay) countDisplay.innerHTML = `👥 ${players.length} player${players.length !== 1 ? 's' : ''} joined`;
         }
         
-        // Update analytics
         updateAnalytics(players);
     });
 }
 
-function updateAnalytics(players) {
-    const container = document.getElementById('analyticsDisplay');
-    if (!container) return;
-    
-    const totalPlayers = players.length;
-    const avgScore = players.length ? Math.round(players.reduce((sum, p) => sum + (p.score || 0), 0) / players.length) : 0;
-    const topScore = players.length ? Math.max(...players.map(p => p.score || 0)) : 0;
-    
-    container.innerHTML = `
-        <div class="analytics-stat"><strong>Total Players:</strong> <span>${totalPlayers}</span></div>
-        <div class="analytics-stat"><strong>Average Score:</strong> <span>${avgScore}</span></div>
-        <div class="analytics-stat"><strong>Highest Score:</strong> <span>${topScore}</span></div>
-    `;
-}
-
-// Start game - Update Firebase
 async function startGame() {
     if (!currentGameRef) {
         alert('No active game found');
@@ -178,11 +157,12 @@ async function startGame() {
     try {
         await currentGameRef.update({ 
             status: 'active', 
-            currentQuestionIndex: -1 
+            currentQuestionIndex: -1,
+            waitingForNext: false
         });
         
         const statusDiv = document.getElementById('gameStatusMessage');
-        if (statusDiv) statusDiv.innerHTML = '🚀 Game started! Click NEXT QUESTION to send first question.';
+        if (statusDiv) statusDiv.innerHTML = '🚀 Game started! Click NEXT QUESTION to begin.';
         
         const nextBtn = document.getElementById('nextQuestionBtn');
         if (nextBtn) nextBtn.disabled = false;
@@ -197,14 +177,13 @@ async function startGame() {
     }
 }
 
-// Next question - Send to Firebase
 async function nextQuestion() {
     if (!currentGameRef) {
         alert('No active game found');
         return;
     }
     
-    setLoading('Sending question');
+    setLoading('Loading question');
     
     try {
         const doc = await currentGameRef.get();
@@ -215,7 +194,10 @@ async function nextQuestion() {
             return;
         }
         
+        // Get current index and move to next
         let nextIdx = (data.currentQuestionIndex || -1) + 1;
+        
+        console.log('Current index:', data.currentQuestionIndex, 'Next index:', nextIdx, 'Total:', data.questions.length);
         
         if (nextIdx >= data.questions.length) {
             await endGame();
@@ -226,9 +208,12 @@ async function nextQuestion() {
         if (currentQuestionTimeout) clearTimeout(currentQuestionTimeout);
         
         // Update current question index in Firebase
-        await currentGameRef.update({ currentQuestionIndex: nextIdx });
+        await currentGameRef.update({ 
+            currentQuestionIndex: nextIdx,
+            waitingForNext: false
+        });
         
-        // Create active question document in Firebase
+        // Create active question document in Firebase with 15 second timer
         const activeRef = currentGameRef.collection('activeQuestion').doc('current');
         await activeRef.set({
             question: data.questions[nextIdx],
@@ -244,13 +229,18 @@ async function nextQuestion() {
         const statusDiv = document.getElementById('gameStatusMessage');
         if (statusDiv) statusDiv.innerHTML = `📢 Question ${nextIdx + 1}/${data.questions.length} is LIVE! Waiting for answers...`;
         
-        // Auto-close after 15 seconds
+        // Auto-close after 15 seconds and enable next button
         currentQuestionTimeout = setTimeout(async () => {
-            const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
-            if (activeDoc.exists && activeDoc.data()?.isActive) {
-                await activeRef.update({ isActive: false });
-                if (statusDiv) statusDiv.innerHTML = `⏰ Time's up for Question ${nextIdx + 1}! Click NEXT to continue.`;
-                if (nextBtn) nextBtn.disabled = false;
+            try {
+                const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
+                if (activeDoc.exists && activeDoc.data()?.isActive) {
+                    await activeRef.update({ isActive: false });
+                    await currentGameRef.update({ waitingForNext: true });
+                    if (statusDiv) statusDiv.innerHTML = `⏰ Time\'s up for Question ${nextIdx + 1}! Click NEXT to continue.`;
+                    if (nextBtn) nextBtn.disabled = false;
+                }
+            } catch (err) {
+                console.error('Timeout error:', err);
             }
         }, 15000);
         
@@ -261,7 +251,6 @@ async function nextQuestion() {
     }
 }
 
-// End game - Update Firebase
 async function endGame() {
     if (!currentGameRef) return;
     
@@ -292,7 +281,21 @@ async function endGame() {
     }
 }
 
-// Preview questions (local, no Firebase needed)
+function updateAnalytics(players) {
+    const container = document.getElementById('analyticsDisplay');
+    if (!container) return;
+    
+    const totalPlayers = players.length;
+    const avgScore = totalPlayers ? Math.round(players.reduce((sum, p) => sum + (p.score || 0), 0) / totalPlayers) : 0;
+    const topScore = totalPlayers ? Math.max(...players.map(p => p.score || 0)) : 0;
+    
+    container.innerHTML = `
+        <div class="analytics-stat"><strong>Total Players:</strong> ${totalPlayers}</div>
+        <div class="analytics-stat"><strong>Average Score:</strong> ${avgScore}</div>
+        <div class="analytics-stat"><strong>Highest Score:</strong> ${topScore}</div>
+    `;
+}
+
 function previewQuestions(questions) {
     if (!questions || questions.length === 0) {
         alert('No questions to preview');
@@ -308,9 +311,8 @@ function previewQuestions(questions) {
         <div class="preview-question">
             <h4>Question ${i+1}</h4>
             <p><strong>${escapeHtml(q.text)}</strong></p>
-            <p>Type: ${q.type.replace('_', ' ')} | Difficulty: ${q.difficulty} | Points: ${q.points}</p>
+            <p>Type: ${q.type} | Difficulty: ${q.difficulty} | Points: ${q.points}</p>
             <p style="color:#48bb78;"><strong>✓ Answer:</strong> ${getCorrectAnswerText(q)}</p>
-            ${q.explanation ? `<p>📖 ${escapeHtml(q.explanation)}</p>` : ''}
         </div>
     `).join('');
     
@@ -322,7 +324,6 @@ function closeModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-// Clear session
 function clearGameSession() {
     if (unsubGame) unsubGame();
     if (unsubPlayers) unsubPlayers();
@@ -332,6 +333,7 @@ function clearGameSession() {
     currentGameRef = null;
     currentGamePin = null;
     currentHostId = null;
+    currentQuestionIndex = -1;
     
     sessionStorage.removeItem('activeGameSession');
 }
