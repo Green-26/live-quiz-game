@@ -1,4 +1,4 @@
-// ==================== UI NAVIGATION ====================
+// ==================== UI NAVIGATION WITH FIREBASE ====================
 
 let directHostQuestions = [];
 
@@ -19,19 +19,19 @@ function showTeacherDashboard() {
     renderQuestionsList();
 }
 
-function showDirectHostPanel() {
+async function showDirectHostPanel() {
     document.getElementById('landingPage').classList.add('hidden');
     document.getElementById('teacherDashboard').classList.add('hidden');
     document.getElementById('directHostPanel').classList.remove('hidden');
     document.getElementById('activeGameDashboard').classList.add('hidden');
     document.getElementById('studentJoinPage').classList.add('hidden');
     
-    // Load saved questions or start fresh
-    if (directHostQuestions.length === 0) {
-        const saved = localStorage.getItem('directHostQuestions');
-        if (saved) {
-            directHostQuestions = JSON.parse(saved);
-        }
+    // Load saved questions
+    const saved = localStorage.getItem('directHostQuestions');
+    if (saved) {
+        directHostQuestions = JSON.parse(saved);
+    } else {
+        directHostQuestions = [];
     }
     renderDirectQuestionsList();
     renderDirectQuestionForm();
@@ -52,9 +52,11 @@ function showStudentJoin() {
 }
 
 function backToLanding() {
-    clearSession();
+    clearGameSession();
     showLandingPage();
 }
+
+// ==================== DIRECT HOST QUESTION FUNCTIONS ====================
 
 function renderDirectQuestionForm() {
     const type = document.getElementById('directQuestionType').value;
@@ -164,7 +166,7 @@ function addDirectQuestion() {
     
     directHostQuestions.push(question);
     renderDirectQuestionsList();
-    saveDirectQuestionsToLocal();
+    localStorage.setItem('directHostQuestions', JSON.stringify(directHostQuestions));
     
     // Clear form
     document.getElementById('directQuestionText').value = '';
@@ -201,14 +203,10 @@ function renderDirectQuestionsList() {
             if (confirm('Remove this question?')) {
                 directHostQuestions.splice(index, 1);
                 renderDirectQuestionsList();
-                saveDirectQuestionsToLocal();
+                localStorage.setItem('directHostQuestions', JSON.stringify(directHostQuestions));
             }
         });
     });
-}
-
-function saveDirectQuestionsToLocal() {
-    localStorage.setItem('directHostQuestions', JSON.stringify(directHostQuestions));
 }
 
 function addDirectSampleQuestions() {
@@ -221,7 +219,7 @@ function addDirectSampleQuestions() {
     
     directHostQuestions.push(...samples);
     renderDirectQuestionsList();
-    saveDirectQuestionsToLocal();
+    localStorage.setItem('directHostQuestions', JSON.stringify(directHostQuestions));
     alert(`Added ${samples.length} sample questions!`);
 }
 
@@ -229,10 +227,12 @@ function clearDirectQuestions() {
     if (confirm('⚠️ Clear ALL questions?')) {
         directHostQuestions = [];
         renderDirectQuestionsList();
-        saveDirectQuestionsToLocal();
+        localStorage.setItem('directHostQuestions', JSON.stringify(directHostQuestions));
         alert('All questions cleared');
     }
 }
+
+// ==================== FINALIZE HOST GAME ====================
 
 async function finalizeAndHostGame() {
     if (!directHostQuestions.length) {
@@ -240,121 +240,331 @@ async function finalizeAndHostGame() {
         return;
     }
     
-    setLoading('Creating game');
+    // Create game in Firebase
+    const result = await directHostNewGame(directHostQuestions);
     
-    const pin = Math.floor(100000 + Math.random() * 900000).toString();
-    currentGamePin = pin;
-    currentQuestions = directHostQuestions;
-    
-    try {
-        const user = await auth.signInAnonymously();
-        const gameRef = db.collection('games').doc(pin);
-        
-        await gameRef.set({
-            pin: pin,
-            status: 'created',
-            currentQuestionIndex: -1,
-            questions: directHostQuestions,
-            hostId: user.user.uid,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        currentGameRef = gameRef;
-        saveSession(pin, true);
-        
+    if (result.success) {
         // Switch to active game dashboard
         document.getElementById('directHostPanel').classList.add('hidden');
         document.getElementById('activeGameDashboard').classList.remove('hidden');
-        document.getElementById('gamePinDisplay').innerText = pin;
+        document.getElementById('gamePinDisplay').innerText = result.pin;
         document.getElementById('gameStatusMessage').innerHTML = '📌 Game created! Share this PIN with students. Click START GAME when ready.';
         
-        attachGameListeners(gameRef);
-        
-        console.log('Game created with PIN:', pin);
-    } catch (error) {
-        console.error(error);
-        alert('Failed to create game: ' + error.message);
+        // Attach Firebase listeners
+        await attachGameListeners(result.gameRef);
     }
 }
 
-// Setup all UI event listeners
+// ==================== CREATE GAME FROM TEACHER DASHBOARD ====================
+
+async function createGameAndHost() {
+    if (!currentQuestions.length) {
+        alert('Please add some questions first!');
+        return;
+    }
+    
+    const result = await directHostNewGame(currentQuestions);
+    
+    if (result.success) {
+        document.getElementById('teacherDashboard').classList.add('hidden');
+        document.getElementById('activeGameDashboard').classList.remove('hidden');
+        document.getElementById('gamePinDisplay').innerText = result.pin;
+        document.getElementById('gameStatusMessage').innerHTML = '📌 Game created! Share this PIN with students. Click START GAME when ready.';
+        
+        await attachGameListeners(result.gameRef);
+    }
+}
+
+// ==================== SETUP ALL EVENT LISTENERS ====================
+
 function setupUIListeners() {
-    // Main navigation
-    document.getElementById('teacherDashboardBtn')?.addEventListener('click', () => {
+    console.log('Setting up UI listeners...');
+    
+    // Main navigation buttons
+    const teacherBtn = document.getElementById('teacherDashboardBtn');
+    const hostBtn = document.getElementById('hostNewGameBtn');
+    const studentBtn = document.getElementById('studentJoinBtn');
+    
+    if (teacherBtn) teacherBtn.addEventListener('click', () => {
         loadQuestionsFromLocal();
         showTeacherDashboard();
     });
     
-    document.getElementById('hostNewGameBtn')?.addEventListener('click', () => {
-        directHostQuestions = [];
-        const saved = localStorage.getItem('directHostQuestions');
-        if (saved) directHostQuestions = JSON.parse(saved);
-        renderDirectQuestionsList();
-        showDirectHostPanel();
-    });
+    if (hostBtn) {
+        hostBtn.addEventListener('click', () => {
+            console.log('Host New Game clicked');
+            showDirectHostPanel();
+        });
+    }
     
-    document.getElementById('studentJoinBtn')?.addEventListener('click', showStudentJoin);
-    document.getElementById('backToLandingBtn')?.addEventListener('click', backToLanding);
-    document.getElementById('backFromDirectHostBtn')?.addEventListener('click', backToLanding);
-    document.getElementById('backToLandingFromStudentBtn')?.addEventListener('click', backToLanding);
-    document.getElementById('exitGameBtn')?.addEventListener('click', backToLanding);
+    if (studentBtn) studentBtn.addEventListener('click', showStudentJoin);
     
-    // Question builder for teacher dashboard
-    document.getElementById('addQuestionBtn')?.addEventListener('click', addQuestion);
-    document.getElementById('addSampleBtn')?.addEventListener('click', addSampleQuestions);
-    document.getElementById('clearQuestionsBtn')?.addEventListener('click', clearAllQuestions);
-    document.getElementById('questionType')?.addEventListener('change', renderQuestionForm);
-    document.getElementById('createGameAndHostBtn')?.addEventListener('click', createGameAndHost);
+    // Back buttons
+    const backToLandingBtn = document.getElementById('backToLandingBtn');
+    const backFromDirectHost = document.getElementById('backFromDirectHostBtn');
+    const backFromStudent = document.getElementById('backToLandingFromStudentBtn');
+    const exitGameBtn = document.getElementById('exitGameBtn');
+    
+    if (backToLandingBtn) backToLandingBtn.addEventListener('click', backToLanding);
+    if (backFromDirectHost) backFromDirectHost.addEventListener('click', backToLanding);
+    if (backFromStudent) backFromStudent.addEventListener('click', backToLanding);
+    if (exitGameBtn) exitGameBtn.addEventListener('click', backToLanding);
+    
+    // Teacher dashboard question buttons
+    const addQBtn = document.getElementById('addQuestionBtn');
+    const sampleBtn = document.getElementById('addSampleBtn');
+    const clearBtn = document.getElementById('clearQuestionsBtn');
+    const typeSelect = document.getElementById('questionType');
+    const createGameBtn = document.getElementById('createGameAndHostBtn');
+    
+    if (addQBtn) addQBtn.addEventListener('click', addQuestion);
+    if (sampleBtn) sampleBtn.addEventListener('click', addSampleQuestions);
+    if (clearBtn) clearBtn.addEventListener('click', clearAllQuestions);
+    if (typeSelect) typeSelect.addEventListener('change', renderQuestionForm);
+    if (createGameBtn) createGameBtn.addEventListener('click', createGameAndHost);
     
     // Direct host panel buttons
-    document.getElementById('directAddQuestionBtn')?.addEventListener('click', addDirectQuestion);
-    document.getElementById('directAddSampleBtn')?.addEventListener('click', addDirectSampleQuestions);
-    document.getElementById('directClearQuestionsBtn')?.addEventListener('click', clearDirectQuestions);
-    document.getElementById('directQuestionType')?.addEventListener('change', renderDirectQuestionForm);
-    document.getElementById('finalizeHostGameBtn')?.addEventListener('click', finalizeAndHostGame);
+    const directAddBtn = document.getElementById('directAddQuestionBtn');
+    const directSampleBtn = document.getElementById('directAddSampleBtn');
+    const directClearBtn = document.getElementById('directClearQuestionsBtn');
+    const directTypeSelect = document.getElementById('directQuestionType');
+    const finalizeBtn = document.getElementById('finalizeHostGameBtn');
+    
+    if (directAddBtn) directAddBtn.addEventListener('click', addDirectQuestion);
+    if (directSampleBtn) directSampleBtn.addEventListener('click', addDirectSampleQuestions);
+    if (directClearBtn) directClearBtn.addEventListener('click', clearDirectQuestions);
+    if (directTypeSelect) directTypeSelect.addEventListener('change', renderDirectQuestionForm);
+    if (finalizeBtn) finalizeBtn.addEventListener('click', finalizeAndHostGame);
     
     // Game control buttons
-    document.getElementById('startGameBtn')?.addEventListener('click', startGame);
-    document.getElementById('nextQuestionBtn')?.addEventListener('click', nextQuestion);
-    document.getElementById('endGameBtn')?.addEventListener('click', endGame);
-    document.getElementById('previewGameBtn')?.addEventListener('click', () => {
-        if (currentQuestions.length) {
-            const modal = document.getElementById('previewModal');
-            const content = document.getElementById('previewContent');
-            content.innerHTML = currentQuestions.map((q, i) => `
-                <div class="preview-question">
-                    <h4>Question ${i+1}</h4>
-                    <p><strong>${escapeHtml(q.text)}</strong></p>
-                    <p>Type: ${q.type} | Difficulty: ${q.difficulty} | Points: ${q.points}</p>
-                    <p style="color:#48bb78;"><strong>Answer:</strong> ${getCorrectAnswerText(q)}</p>
-                </div>
-            `).join('');
-            modal.classList.remove('hidden');
-        } else {
-            alert('No questions to preview');
-        }
-    });
+    const startGameBtn = document.getElementById('startGameBtn');
+    const nextQBtn = document.getElementById('nextQuestionBtn');
+    const endGameBtn = document.getElementById('endGameBtn');
+    const previewBtn = document.getElementById('previewGameBtn');
     
-    // Student join
-    document.getElementById('joinGameBtn')?.addEventListener('click', joinGameAsStudent);
+    if (startGameBtn) startGameBtn.addEventListener('click', startGame);
+    if (nextQBtn) nextQBtn.addEventListener('click', nextQuestion);
+    if (endGameBtn) endGameBtn.addEventListener('click', endGame);
+    if (previewBtn) {
+        previewBtn.addEventListener('click', () => {
+            if (currentQuestions.length) {
+                previewQuestions(currentQuestions);
+            } else if (directHostQuestions.length) {
+                previewQuestions(directHostQuestions);
+            } else {
+                alert('No questions to preview');
+            }
+        });
+    }
     
-    // Modal close
-    document.getElementById('closeModal')?.addEventListener('click', () => {
-        document.getElementById('previewModal').classList.add('hidden');
-    });
-    document.getElementById('closeModalBtn')?.addEventListener('click', () => {
-        document.getElementById('previewModal').classList.add('hidden');
-    });
+    // Student join button
+    const joinBtn = document.getElementById('joinGameBtn');
+    if (joinBtn) joinBtn.addEventListener('click', joinGameAsStudent);
+    
+    // Modal close buttons
+    const closeModal1 = document.getElementById('closeModal');
+    const closeModal2 = document.getElementById('closeModalBtn');
+    if (closeModal1) closeModal1.addEventListener('click', closeModal);
+    if (closeModal2) closeModal2.addEventListener('click', closeModal);
     
     // Enter key for join
-    document.getElementById('gamePinInput')?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinGameAsStudent();
-    });
-    document.getElementById('studentNameInput')?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinGameAsStudent();
-    });
+    const pinInput = document.getElementById('gamePinInput');
+    const nameInput = document.getElementById('studentNameInput');
+    if (pinInput) pinInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') joinGameAsStudent(); });
+    if (nameInput) nameInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') joinGameAsStudent(); });
     
-    // Initialize form
+    // Initialize forms
     renderQuestionForm();
     renderDirectQuestionForm();
+    
+    console.log('✅ All UI listeners attached');
+}
+
+// Save teacher questions to localStorage
+function saveQuestionsToLocal() {
+    localStorage.setItem('teacherQuiz', JSON.stringify(currentQuestions));
+}
+
+function loadQuestionsFromLocal() {
+    const saved = localStorage.getItem('teacherQuiz');
+    if (saved) {
+        currentQuestions = JSON.parse(saved);
+        renderQuestionsList();
+    } else {
+        currentQuestions = [];
+    }
+}
+
+function renderQuestionsList() {
+    const container = document.getElementById('questionsListContainer');
+    if (!container) return;
+    
+    if (!currentQuestions || currentQuestions.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:#718096; padding:20px;">📭 No questions yet. Add some above!</p>';
+        return;
+    }
+    
+    container.innerHTML = currentQuestions.map((q, i) => `
+        <div class="question-item">
+            <div>
+                <span class="question-badge">${q.type.replace('_', ' ')}</span>
+                <strong>Q${i+1}:</strong> ${escapeHtml(q.text.substring(0, 50))}
+                <span style="margin-left:10px;">🎯 ${q.points} pts</span>
+            </div>
+            <button class="remove-teacher-btn" data-index="${i}">✖ Remove</button>
+        </div>
+    `).join('');
+    
+    document.querySelectorAll('.remove-teacher-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const index = parseInt(btn.dataset.index);
+            if (confirm('Remove this question?')) {
+                currentQuestions.splice(index, 1);
+                renderQuestionsList();
+                saveQuestionsToLocal();
+            }
+        });
+    });
+}
+
+function addQuestion() {
+    const question = buildQuestion();
+    if (!question) return;
+    
+    currentQuestions.push(question);
+    renderQuestionsList();
+    saveQuestionsToLocal();
+    
+    document.getElementById('questionText').value = '';
+    if (document.getElementById('opt1')) document.getElementById('opt1').value = '';
+    if (document.getElementById('opt2')) document.getElementById('opt2').value = '';
+    if (document.getElementById('opt3')) document.getElementById('opt3').value = '';
+    if (document.getElementById('opt4')) document.getElementById('opt4').value = '';
+    
+    alert('Question added!');
+}
+
+function addSampleQuestions() {
+    const samples = [
+        { id: Date.now()+1, type: 'multiple_choice', text: 'What is the capital of France?', options: ['London', 'Paris', 'Berlin', 'Madrid'], correctAnswer: 1, difficulty: 'easy', subject: 'geography', points: 100, explanation: 'Paris is the capital of France' },
+        { id: Date.now()+2, type: 'true_false', text: 'The Earth is flat', correctAnswer: false, difficulty: 'easy', subject: 'science', points: 50, explanation: 'The Earth is actually round' },
+        { id: Date.now()+3, type: 'numeric', text: 'What is 15 + 27?', correctAnswer: 42, difficulty: 'easy', subject: 'math', points: 75 },
+        { id: Date.now()+4, type: 'fill_blank', text: 'Water freezes at ______ degrees Celsius', correctAnswer: '0', difficulty: 'easy', subject: 'science', points: 50 }
+    ];
+    
+    currentQuestions.push(...samples);
+    renderQuestionsList();
+    saveQuestionsToLocal();
+    alert(`Added ${samples.length} sample questions!`);
+}
+
+function clearAllQuestions() {
+    if (confirm('⚠️ Clear ALL questions?')) {
+        currentQuestions = [];
+        renderQuestionsList();
+        saveQuestionsToLocal();
+        alert('All questions cleared');
+    }
+}
+
+function buildQuestion() {
+    const type = document.getElementById('questionType').value;
+    const text = document.getElementById('questionText')?.value.trim();
+    const difficulty = document.getElementById('difficulty').value;
+    const subject = document.getElementById('subject').value;
+    const points = parseInt(document.getElementById('points')?.value) || 100;
+    const explanation = document.getElementById('explanation')?.value || '';
+    
+    if (!text) {
+        alert('Please enter a question');
+        return null;
+    }
+    
+    const question = {
+        id: Date.now(),
+        type: type,
+        text: text,
+        difficulty: difficulty,
+        subject: subject,
+        points: points,
+        explanation: explanation
+    };
+    
+    if (type === 'multiple_choice') {
+        const opt1 = document.getElementById('opt1')?.value.trim();
+        const opt2 = document.getElementById('opt2')?.value.trim();
+        const opt3 = document.getElementById('opt3')?.value.trim();
+        const opt4 = document.getElementById('opt4')?.value.trim();
+        
+        if (!opt1 || !opt2 || !opt3 || !opt4) {
+            alert('All options are required');
+            return null;
+        }
+        
+        question.options = [opt1, opt2, opt3, opt4];
+        question.correctAnswer = parseInt(document.getElementById('correctOpt').value);
+    } else if (type === 'true_false') {
+        question.correctAnswer = document.getElementById('correctOpt').value === 'true';
+    } else if (type === 'fill_blank') {
+        const correct = document.getElementById('correctAnswer')?.value.trim();
+        if (!correct) {
+            alert('Correct answer is required');
+            return null;
+        }
+        question.correctAnswer = correct;
+    } else if (type === 'numeric') {
+        const correct = parseFloat(document.getElementById('correctValue')?.value);
+        if (isNaN(correct)) {
+            alert('Correct answer is required');
+            return null;
+        }
+        question.correctAnswer = correct;
+        question.unit = document.getElementById('unit')?.value || '';
+        question.tolerance = 0;
+    }
+    
+    return question;
+}
+
+function renderQuestionForm() {
+    const type = document.getElementById('questionType').value;
+    const container = document.getElementById('questionFormContainer');
+    
+    let html = '<input type="text" id="questionText" class="input-field mb-20" placeholder="Enter your question...">';
+    
+    if (type === 'multiple_choice') {
+        html += `
+            <input type="text" id="opt1" class="input-field mb-20" placeholder="Option A">
+            <input type="text" id="opt2" class="input-field mb-20" placeholder="Option B">
+            <input type="text" id="opt3" class="input-field mb-20" placeholder="Option C">
+            <input type="text" id="opt4" class="input-field mb-20" placeholder="Option D">
+            <select id="correctOpt" class="input-field mb-20">
+                <option value="0">Option A is correct</option>
+                <option value="1">Option B is correct</option>
+                <option value="2">Option C is correct</option>
+                <option value="3">Option D is correct</option>
+            </select>
+        `;
+    } else if (type === 'true_false') {
+        html += `
+            <select id="correctOpt" class="input-field mb-20">
+                <option value="true">True</option>
+                <option value="false">False</option>
+            </select>
+        `;
+    } else if (type === 'fill_blank') {
+        html += `<input type="text" id="correctAnswer" class="input-field mb-20" placeholder="Correct answer">`;
+    } else if (type === 'numeric') {
+        html += `
+            <input type="number" id="correctValue" class="input-field mb-20" placeholder="Correct answer">
+            <input type="text" id="unit" class="input-field mb-20" placeholder="Unit (optional)">
+        `;
+    }
+    
+    html += `
+        <input type="text" id="explanation" class="input-field mb-20" placeholder="Explanation (optional)">
+        <input type="number" id="points" class="input-field" placeholder="Points" value="100">
+    `;
+    
+    container.innerHTML = html;
 }

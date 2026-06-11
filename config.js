@@ -1,5 +1,5 @@
-// ==================== FIREBASE CONFIG ====================
-// REPLACE WITH YOUR FIREBASE PROJECT CONFIG
+// ==================== FIREBASE CONFIGURATION ====================
+// REPLACE WITH YOUR FIREBASE PROJECT CONFIGURATION
 const firebaseConfig = {
   apiKey: "AIzaSyBNZHd8475afKLV2Wvl9qVcjUOpnJyokws",
   authDomain: "live-quiz-game-26.firebaseapp.com",
@@ -23,9 +23,11 @@ let unsubGame = null;
 let unsubPlayers = null;
 let activeQuestionListener = null;
 let currentQuestionTimeout = null;
+let currentHostId = null;
 
 // Helper Functions
 function setLoading(message) {
+    const originalTitle = document.title;
     document.title = `🔄 ${message}...`;
     setTimeout(() => {
         if (document.title.includes('🔄')) {
@@ -41,4 +43,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-console.log('✅ Config loaded');
+console.log('✅ Firebase initialized');
+console.log('Firestore:', db ? 'connected' : 'failed');
+console.log('Auth:', auth ? 'connected' : 'failed');
