@@ -1,5 +1,4 @@
-// ==================== APP.JS - MAIN GAME LOGIC ====================
-// Note: Uses global variables from config.js (db, auth, escapeHtml, setLoading)
+// ==================== APP.JS - COMPLETE WORKING VERSION ====================
 
 let localQuestions = [];
 let isHost = false;
@@ -9,15 +8,23 @@ let playersUnsubscribe = null;
 let questionUnsubscribe = null;
 let questionTimer = null;
 let hasAnsweredFlag = false;
+let currentGameRefGlobal = null;
 
 // ==================== UI FUNCTIONS ====================
-function showPanel(id) { document.getElementById(id).classList.remove('hidden'); }
-function hidePanel(id) { document.getElementById(id).classList.add('hidden'); }
+function showPanel(id) { 
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('hidden');
+}
+function hidePanel(id) { 
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+}
 
 // ==================== QUESTION FORM ====================
 function renderQuestionBuilder() {
     const type = document.getElementById('questionType').value;
     const container = document.getElementById('questionForm');
+    if (!container) return;
     
     let html = '<input type="text" id="qText" class="input-field" placeholder="Enter your question..." style="margin-bottom:15px;">';
     
@@ -84,6 +91,8 @@ function buildQuestionObject() {
 
 function updateQuestionsDisplay() {
     const container = document.getElementById('questionsList');
+    if (!container) return;
+    
     if (!localQuestions.length) {
         container.innerHTML = '<p style="text-align:center; color:#718096;">No questions yet. Add some!</p>';
         return;
@@ -131,7 +140,7 @@ async function createAndLaunchGame() {
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        currentGameRef = gameRef;
+        currentGameRefGlobal = gameRef;
         isHost = true;
         
         hidePanel('hostPanel');
@@ -147,7 +156,7 @@ async function attachHostListeners() {
     if (gameUnsubscribe) gameUnsubscribe();
     if (playersUnsubscribe) playersUnsubscribe();
     
-    gameUnsubscribe = currentGameRef.onSnapshot(doc => {
+    gameUnsubscribe = currentGameRefGlobal.onSnapshot(doc => {
         if (!doc.exists) return;
         const data = doc.data();
         const startBtn = document.getElementById('startGameBtn');
@@ -174,7 +183,7 @@ async function attachHostListeners() {
         }
     });
     
-    const playersRef = currentGameRef.collection('players');
+    const playersRef = currentGameRefGlobal.collection('players');
     playersUnsubscribe = playersRef.onSnapshot(snapshot => {
         const players = [];
         snapshot.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
@@ -184,50 +193,60 @@ async function attachHostListeners() {
         const countSpan = document.getElementById('playerCount');
         
         if (!players.length) {
-            container.innerHTML = '<div class="leaderboard-entry">No players yet. Share the PIN!</div>';
-            countSpan.innerHTML = '👥 0 players joined';
+            if (container) container.innerHTML = '<div class="leaderboard-entry">No players yet. Share the PIN!</div>';
+            if (countSpan) countSpan.innerHTML = '👥 0 players joined';
         } else {
-            container.innerHTML = players.map((p, i) => `
-                <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}">
-                    <span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)}</span>
-                    <span>⭐ ${p.score || 0}</span>
-                </div>
-            `).join('');
-            countSpan.innerHTML = `👥 ${players.length} player(s) joined`;
+            if (container) {
+                container.innerHTML = players.map((p, i) => `
+                    <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}">
+                        <span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)}</span>
+                        <span>⭐ ${p.score || 0}</span>
+                    </div>
+                `).join('');
+            }
+            if (countSpan) countSpan.innerHTML = `👥 ${players.length} player(s) joined`;
         }
         
         const totalScore = players.reduce((sum, p) => sum + (p.score || 0), 0);
         const avgScore = players.length ? Math.round(totalScore / players.length) : 0;
         const topScore = players.length ? players[0].score || 0 : 0;
-        document.getElementById('statsDisplay').innerHTML = `
-            <div class="leaderboard-entry">📊 Average: ${avgScore}</div>
-            <div class="leaderboard-entry">🏆 Highest: ${topScore}</div>
-            <div class="leaderboard-entry">👥 Total: ${players.length}</div>
-        `;
+        const statsDiv = document.getElementById('statsDisplay');
+        if (statsDiv) {
+            statsDiv.innerHTML = `
+                <div class="leaderboard-entry">📊 Average: ${avgScore}</div>
+                <div class="leaderboard-entry">🏆 Highest: ${topScore}</div>
+                <div class="leaderboard-entry">👥 Total: ${players.length}</div>
+            `;
+        }
     });
 }
 
-async function startGameHost() { await currentGameRef.update({ status: 'active', currentQuestionIndex: -1 }); document.getElementById('gameStatusMsg').innerHTML = '🚀 Game started! Click NEXT QUESTION.'; document.getElementById('nextQuestionBtn').disabled = false; }
+async function startGameHost() { 
+    await currentGameRefGlobal.update({ status: 'active', currentQuestionIndex: -1 }); 
+    document.getElementById('gameStatusMsg').innerHTML = '🚀 Game started! Click NEXT QUESTION.';
+    document.getElementById('nextQuestionBtn').disabled = false;
+}
 
 async function sendNextQuestionHost() {
-    const doc = await currentGameRef.get();
+    const doc = await currentGameRefGlobal.get();
     const data = doc.data();
     let nextIdx = (data.currentQuestionIndex || -1) + 1;
     
     if (nextIdx >= data.questions.length) {
-        await currentGameRef.update({ status: 'ended' });
+        await currentGameRefGlobal.update({ status: 'ended' });
         alert('Quiz completed!');
         return;
     }
     
-    await currentGameRef.update({ currentQuestionIndex: nextIdx });
+    await currentGameRefGlobal.update({ currentQuestionIndex: nextIdx });
     
-    const activeRef = currentGameRef.collection('activeQuestion').doc('current');
+    const activeRef = currentGameRefGlobal.collection('activeQuestion').doc('current');
     await activeRef.set({
         question: data.questions[nextIdx],
         startedAt: firebase.firestore.FieldValue.serverTimestamp(),
         expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 15000)),
-        isActive: true, questionIndex: nextIdx
+        isActive: true, 
+        questionIndex: nextIdx
     });
     
     document.getElementById('nextQuestionBtn').disabled = true;
@@ -235,7 +254,7 @@ async function sendNextQuestionHost() {
     
     if (questionTimer) clearTimeout(questionTimer);
     questionTimer = setTimeout(async () => {
-        const active = await currentGameRef.collection('activeQuestion').doc('current').get();
+        const active = await currentGameRefGlobal.collection('activeQuestion').doc('current').get();
         if (active.exists && active.data()?.isActive) {
             await activeRef.update({ isActive: false });
             document.getElementById('gameStatusMsg').innerHTML = `⏰ Time\'s up! Click NEXT.`;
@@ -247,7 +266,7 @@ async function sendNextQuestionHost() {
 async function endGameHost() {
     if (confirm('End the game?')) {
         if (questionTimer) clearTimeout(questionTimer);
-        await currentGameRef.update({ status: 'ended' });
+        await currentGameRefGlobal.update({ status: 'ended' });
         document.getElementById('nextQuestionBtn').disabled = true;
         document.getElementById('startGameBtn').disabled = true;
     }
@@ -258,95 +277,227 @@ async function joinStudentGame() {
     const name = document.getElementById('studentNameInput').value.trim();
     const pin = document.getElementById('gamePinInput').value.trim();
     
-    if (!name || !pin) { document.getElementById('joinErrorMsg').innerText = 'Enter name and PIN'; return; }
-    
-    const gameRef = db.collection('games').doc(pin);
-    const gameDoc = await gameRef.get();
-    if (!gameDoc.exists) { document.getElementById('joinErrorMsg').innerText = 'Game not found!'; return; }
-    if (gameDoc.data().status === 'ended') { document.getElementById('joinErrorMsg').innerText = 'Game ended'; return; }
+    if (!name || !pin) { 
+        document.getElementById('joinErrorMsg').innerHTML = '❌ Enter name and PIN'; 
+        return; 
+    }
     
     try {
+        const gameRef = db.collection('games').doc(pin);
+        const gameDoc = await gameRef.get();
+        
+        if (!gameDoc.exists) { 
+            document.getElementById('joinErrorMsg').innerHTML = '❌ Game not found!'; 
+            return; 
+        }
+        
+        const gameData = gameDoc.data();
+        if (gameData.status === 'ended') { 
+            document.getElementById('joinErrorMsg').innerHTML = '❌ Game already ended'; 
+            return; 
+        }
+        
         const user = await auth.signInAnonymously();
         studentId = user.user.uid;
-        currentGameRef = gameRef;
-        await gameRef.collection('players').doc(studentId).set({ name, score: 0, joinedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        currentGameRefGlobal = gameRef;
+        
+        await gameRef.collection('players').doc(studentId).set({ 
+            name: name, 
+            score: 0, 
+            joinedAt: firebase.firestore.FieldValue.serverTimestamp() 
+        });
         
         hidePanel('studentPanel');
         showPanel('waitingArea');
-        document.getElementById('studentNameDisplay').innerText = name;
-        document.getElementById('pinDisplay').innerText = pin;
+        document.getElementById('studentNameDisplay').innerHTML = name;
+        document.getElementById('pinDisplay').innerHTML = pin;
+        document.getElementById('scoreDisplay').innerHTML = '0';
         
         attachStudentListeners();
-    } catch (error) { document.getElementById('joinErrorMsg').innerText = 'Failed: ' + error.message; }
+        
+    } catch (error) { 
+        document.getElementById('joinErrorMsg').innerHTML = '❌ Failed: ' + error.message;
+    }
 }
 
 function attachStudentListeners() {
+    // Clean up old listeners
     if (gameUnsubscribe) gameUnsubscribe();
     if (questionUnsubscribe) questionUnsubscribe();
     if (playersUnsubscribe) playersUnsubscribe();
     
-    gameUnsubscribe = currentGameRef.onSnapshot(doc => {
+    // Listen to game status changes
+    gameUnsubscribe = currentGameRefGlobal.onSnapshot(doc => {
         if (!doc.exists) return;
         const data = doc.data();
-        if (data.status === 'waiting') { hidePanel('quizAreaStudent'); showPanel('waitingArea'); hidePanel('resultsArea'); }
-        else if (data.status === 'active') { hidePanel('waitingArea'); showPanel('quizAreaStudent'); hidePanel('resultsArea'); }
-        else if (data.status === 'ended') { hidePanel('quizAreaStudent'); hidePanel('waitingArea'); showStudentFinalResults(); }
+        console.log('Game status:', data.status);
+        
+        if (data.status === 'waiting') { 
+            hidePanel('quizAreaStudent'); 
+            showPanel('waitingArea'); 
+            hidePanel('resultsArea'); 
+        } else if (data.status === 'active') { 
+            hidePanel('waitingArea'); 
+            showPanel('quizAreaStudent'); 
+            hidePanel('resultsArea'); 
+        } else if (data.status === 'ended') { 
+            hidePanel('quizAreaStudent'); 
+            hidePanel('waitingArea'); 
+            showStudentFinalResults(); 
+        }
     });
     
-    questionUnsubscribe = currentGameRef.collection('activeQuestion').doc('current').onSnapshot(snap => {
-        if (!snap.exists || !snap.data().isActive) { document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Getting next question...</div>'; return; }
+    // Listen to active question - THIS IS THE KEY PART FOR STUDENTS TO SEE QUESTIONS
+    questionUnsubscribe = currentGameRefGlobal.collection('activeQuestion').doc('current').onSnapshot(snap => {
+        console.log('Active question snapshot:', snap.exists);
+        
+        if (!snap.exists) {
+            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Waiting for host to send a question...</div>';
+            return;
+        }
+        
+        const questionData = snap.data();
+        console.log('Question data:', questionData);
+        
+        if (!questionData.isActive) {
+            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Getting next question ready...</div>';
+            return;
+        }
+        
         hasAnsweredFlag = false;
-        const data = snap.data();
-        const question = data.question;
-        const expiry = data.expiresAt.toDate();
-        renderStudentQuestionUI(question);
+        const question = questionData.question;
+        const expiry = questionData.expiresAt.toDate();
+        const qIndex = questionData.questionIndex;
+        
+        // Render the question
+        renderStudentQuestion(question);
+        
+        // Start timer
         startStudentTimer(expiry);
-        attachStudentAnswerHandler(question, async (answer) => { if (!hasAnsweredFlag) { hasAnsweredFlag = true; await submitStudentAnswer(answer, question, data.questionIndex, expiry); } });
+        
+        // Attach answer handler
+        attachStudentAnswerHandler(question, async (answer) => {
+            if (!hasAnsweredFlag) {
+                hasAnsweredFlag = true;
+                await submitStudentAnswer(answer, question, qIndex, expiry);
+            }
+        });
     });
     
-    const scoreRef = currentGameRef.collection('players').doc(studentId);
-    playersUnsubscribe = scoreRef.onSnapshot(doc => { if (doc.exists) { document.getElementById('scoreDisplay').innerText = doc.data()?.score || 0; } });
+    // Listen to score updates
+    const scoreRef = currentGameRefGlobal.collection('players').doc(studentId);
+    playersUnsubscribe = scoreRef.onSnapshot(doc => { 
+        if (doc.exists) { 
+            const score = doc.data()?.score || 0;
+            document.getElementById('scoreDisplay').innerHTML = score;
+        } 
+    });
 }
 
-function renderStudentQuestionUI(question) {
-    if (question.type === 'multiple_choice') {
-        document.getElementById('questionContainer').innerHTML = `<h2>${escapeHtml(question.text)}</h2><div class="options-container">${question.options.map((opt, i) => `<div class="option" data-ans="${i}">${String.fromCharCode(65+i)}. ${escapeHtml(opt)}</div>`).join('')}</div>`;
-    } else if (question.type === 'true_false') {
-        document.getElementById('questionContainer').innerHTML = `<h2>${escapeHtml(question.text)}</h2><div class="tf-options"><div class="tf-option true" data-ans="true">✅ TRUE</div><div class="tf-option false" data-ans="false">❌ FALSE</div></div>`;
-    } else if (question.type === 'fill_blank') {
-        document.getElementById('questionContainer').innerHTML = `<h2>${escapeHtml(question.text)}</h2><input type="text" id="fillAnswerInput" class="blank-input"><button id="submitAnswerStudentBtn" class="btn btn-primary">Submit Answer</button>`;
-    } else if (question.type === 'numeric') {
-        document.getElementById('questionContainer').innerHTML = `<h2>${escapeHtml(question.text)}</h2><input type="number" id="numericAnswerInput" class="blank-input"><button id="submitAnswerStudentBtn" class="btn btn-primary">Submit Answer</button>`;
+function renderStudentQuestion(question) {
+    console.log('Rendering question:', question);
+    
+    if (!question) {
+        document.getElementById('questionContainer').innerHTML = '<div class="text-center">❌ Error loading question</div>';
+        return;
     }
+    
+    if (question.type === 'multiple_choice') {
+        document.getElementById('questionContainer').innerHTML = `
+            <h2 style="margin-bottom: 20px;">${escapeHtml(question.text)}</h2>
+            <div class="options-container">
+                ${question.options.map((opt, i) => `
+                    <div class="option" data-ans="${i}">
+                        ${String.fromCharCode(65+i)}. ${escapeHtml(opt)}
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } else if (question.type === 'true_false') {
+        document.getElementById('questionContainer').innerHTML = `
+            <h2 style="margin-bottom: 20px;">${escapeHtml(question.text)}</h2>
+            <div class="tf-options">
+                <div class="tf-option true" data-ans="true">✅ TRUE</div>
+                <div class="tf-option false" data-ans="false">❌ FALSE</div>
+            </div>
+        `;
+    } else if (question.type === 'fill_blank') {
+        document.getElementById('questionContainer').innerHTML = `
+            <h2 style="margin-bottom: 20px;">${escapeHtml(question.text)}</h2>
+            <input type="text" id="fillAnswerInput" class="blank-input" placeholder="Type your answer here...">
+            <button id="submitAnswerStudentBtn" class="btn btn-primary">Submit Answer</button>
+        `;
+    } else if (question.type === 'numeric') {
+        document.getElementById('questionContainer').innerHTML = `
+            <h2 style="margin-bottom: 20px;">${escapeHtml(question.text)}</h2>
+            <input type="number" id="numericAnswerInput" class="blank-input" placeholder="Enter your answer...">
+            ${question.unit ? `<p style="color:#718096; margin-top:5px;">Unit: ${escapeHtml(question.unit)}</p>` : ''}
+            <button id="submitAnswerStudentBtn" class="btn btn-primary">Submit Answer</button>
+        `;
+    }
+    
+    // Clear any previous feedback
+    document.getElementById('feedbackArea').innerHTML = '';
 }
 
 function attachStudentAnswerHandler(question, handler) {
     if (question.type === 'multiple_choice') {
-        document.querySelectorAll('.option').forEach(opt => { opt.onclick = () => handler(parseInt(opt.dataset.ans)); });
+        setTimeout(() => {
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.onclick = () => {
+                    const answer = parseInt(opt.dataset.ans);
+                    console.log('Selected answer:', answer);
+                    handler(answer);
+                };
+            });
+        }, 100);
     } else if (question.type === 'true_false') {
-        document.querySelectorAll('.tf-option').forEach(opt => { opt.onclick = () => handler(opt.dataset.ans === 'true'); });
+        setTimeout(() => {
+            document.querySelectorAll('.tf-option').forEach(opt => {
+                opt.onclick = () => {
+                    const answer = opt.dataset.ans === 'true';
+                    console.log('Selected answer:', answer);
+                    handler(answer);
+                };
+            });
+        }, 100);
     } else {
-        const btn = document.getElementById('submitAnswerStudentBtn');
-        if (btn) {
-            btn.onclick = () => {
-                const input = document.getElementById(question.type === 'fill_blank' ? 'fillAnswerInput' : 'numericAnswerInput');
-                const value = question.type === 'numeric' ? parseFloat(input.value) : input.value;
-                if (value || value === 0) handler(value);
-                else alert('Enter an answer');
-            };
-        }
+        setTimeout(() => {
+            const btn = document.getElementById('submitAnswerStudentBtn');
+            if (btn) {
+                btn.onclick = () => {
+                    const input = document.getElementById(question.type === 'fill_blank' ? 'fillAnswerInput' : 'numericAnswerInput');
+                    let value = input.value;
+                    if (question.type === 'numeric') value = parseFloat(value);
+                    if (value || value === 0) {
+                        console.log('Submitted answer:', value);
+                        handler(value);
+                    } else {
+                        alert('Please enter an answer');
+                    }
+                };
+            }
+        }, 100);
     }
 }
 
 function startStudentTimer(expiry) {
-    if (window.timerInterval) clearInterval(window.timerInterval);
-    window.timerInterval = setInterval(() => {
+    if (window.studentTimerInterval) clearInterval(window.studentTimerInterval);
+    
+    window.studentTimerInterval = setInterval(() => {
         const remaining = Math.max(0, Math.floor((expiry.getTime() - Date.now()) / 1000));
         const timerDiv = document.getElementById('timerDisplay');
-        timerDiv.innerText = remaining;
-        if (remaining <= 5) timerDiv.classList.add('timer-warning');
-        else timerDiv.classList.remove('timer-warning');
-        if (remaining <= 0) clearInterval(window.timerInterval);
+        if (timerDiv) {
+            timerDiv.innerText = remaining;
+            if (remaining <= 5) {
+                timerDiv.classList.add('timer-warning');
+            } else {
+                timerDiv.classList.remove('timer-warning');
+            }
+        }
+        if (remaining <= 0) {
+            clearInterval(window.studentTimerInterval);
+        }
     }, 200);
 }
 
@@ -356,14 +507,34 @@ async function submitStudentAnswer(answer, question, qIndex, expiry) {
     const points = calculateStudentPoints(question, timeLeft, isCorrect);
     
     const feedback = document.getElementById('feedbackArea');
-    if (isCorrect) { feedback.innerHTML = `<div style="background:#c6f6d5; padding:15px; border-radius:12px;">✅ CORRECT! +${points} points!</div>`; }
-    else { feedback.innerHTML = `<div style="background:#fed7d7; padding:15px; border-radius:12px;">❌ Wrong! Answer: ${getCorrectAnswerText(question)}</div>`; }
+    if (isCorrect) {
+        feedback.innerHTML = `<div style="background:#c6f6d5; padding:15px; border-radius:12px;">✅ CORRECT! +${points} points!</div>`;
+    } else {
+        feedback.innerHTML = `<div style="background:#fed7d7; padding:15px; border-radius:12px;">❌ Wrong! Correct answer: ${getCorrectAnswerText(question)}</div>`;
+    }
     
-    await currentGameRef.collection('players').doc(studentId).collection('answers').doc(`q${qIndex}`).set({ answer, correct: isCorrect, points, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-    const playerDoc = await currentGameRef.collection('players').doc(studentId).get();
-    await currentGameRef.collection('players').doc(studentId).update({ score: (playerDoc.data()?.score || 0) + points });
-    
-    document.querySelectorAll('.option, .tf-option, #submitAnswerStudentBtn').forEach(el => { if (el.tagName === 'BUTTON') el.disabled = true; else el.style.pointerEvents = 'none'; });
+    try {
+        await currentGameRefGlobal.collection('players').doc(studentId).collection('answers').doc(`q${qIndex}`).set({ 
+            answer: answer, 
+            correct: isCorrect, 
+            points: points, 
+            timestamp: firebase.firestore.FieldValue.serverTimestamp() 
+        });
+        
+        const playerDoc = await currentGameRefGlobal.collection('players').doc(studentId).get();
+        const newScore = (playerDoc.data()?.score || 0) + points;
+        await currentGameRefGlobal.collection('players').doc(studentId).update({ score: newScore });
+        
+        // Disable inputs after answering
+        document.querySelectorAll('.option, .tf-option, #submitAnswerStudentBtn').forEach(el => {
+            if (el.tagName === 'BUTTON') el.disabled = true;
+            else el.style.pointerEvents = 'none';
+        });
+        
+    } catch (error) {
+        console.error('Submit error:', error);
+        feedback.innerHTML = `<div style="background:#fed7d7; padding:15px; border-radius:12px;">❌ Error submitting answer. Please try again.</div>`;
+    }
 }
 
 function validateStudentAnswer(question, answer) {
@@ -390,24 +561,90 @@ function getCorrectAnswerText(question) {
 }
 
 async function showStudentFinalResults() {
-    const playersSnap = await currentGameRef.collection('players').orderBy('score', 'desc').get();
-    const players = []; let rank = 0, myScore = 0;
-    playersSnap.forEach((doc, i) => { const d = doc.data(); players.push({ name: d.name, score: d.score || 0 }); if (doc.id === studentId) { rank = i + 1; myScore = d.score || 0; } });
-    const gameDoc = await currentGameRef.get(); const totalQ = gameDoc.data()?.questions.length || 0;
-    document.getElementById('resultsArea').innerHTML = `<div class="card"><div style="font-size:50px;">🏆</div><h2>Game Over!</h2><h3>Your Score: ${myScore} / ${totalQ * 100}</h3><h3>Position: #${rank} of ${players.length}</h3><hr><h3>Final Leaderboard</h3>${players.map((p, i) => `<div class="leaderboard-entry ${i === 0 ? 'top1' : ''}" style="${i+1 === rank ? 'background:#c6f6d5; font-weight:bold;' : ''}"><span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)}</span><span>⭐ ${p.score}</span></div>`).join('')}<button id="playAgainButton" class="btn btn-primary mt-20">Play Again</button></div>`;
-    hidePanel('quizAreaStudent'); showPanel('resultsArea');
+    const playersSnap = await currentGameRefGlobal.collection('players').orderBy('score', 'desc').get();
+    const players = []; 
+    let rank = 0; 
+    let myScore = 0;
+    
+    playersSnap.forEach((doc, i) => { 
+        const d = doc.data(); 
+        players.push({ name: d.name, score: d.score || 0 }); 
+        if (doc.id === studentId) { 
+            rank = i + 1; 
+            myScore = d.score || 0; 
+        } 
+    });
+    
+    const gameDoc = await currentGameRefGlobal.get(); 
+    const totalQ = gameDoc.data()?.questions.length || 0;
+    
+    document.getElementById('resultsArea').innerHTML = `
+        <div class="card">
+            <div style="font-size:50px; text-align:center;">🏆</div>
+            <h2 style="text-align:center;">Game Over!</h2>
+            <h3 style="text-align:center;">Your Score: ${myScore} / ${totalQ * 100}</h3>
+            <h3 style="text-align:center;">Position: #${rank} of ${players.length}</h3>
+            <hr style="margin: 20px 0;">
+            <h3>Final Leaderboard</h3>
+            <div class="leaderboard">
+                ${players.map((p, i) => `
+                    <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}" style="${i+1 === rank ? 'background:#c6f6d5; font-weight:bold;' : ''}">
+                        <span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)}</span>
+                        <span>⭐ ${p.score}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <button id="playAgainButton" class="btn btn-primary mt-20" style="width:100%;">Play Again</button>
+        </div>
+    `;
+    
+    hidePanel('quizAreaStudent'); 
+    showPanel('resultsArea');
     document.getElementById('playAgainButton')?.addEventListener('click', () => location.reload());
 }
 
 // ==================== NAVIGATION ====================
-function showHostScreen() { hidePanel('landingPage'); showPanel('hostPanel'); hidePanel('gameDashboard'); hidePanel('studentPanel'); renderQuestionBuilder(); updateQuestionsDisplay(); }
-function showStudentScreen() { hidePanel('landingPage'); hidePanel('hostPanel'); hidePanel('gameDashboard'); showPanel('studentPanel'); document.getElementById('studentNameInput').value = ''; document.getElementById('gamePinInput').value = ''; }
-function goBackToLanding() { if (gameUnsubscribe) gameUnsubscribe(); if (playersUnsubscribe) playersUnsubscribe(); if (questionUnsubscribe) questionUnsubscribe(); if (questionTimer) clearTimeout(questionTimer); hidePanel('hostPanel'); hidePanel('gameDashboard'); hidePanel('studentPanel'); showPanel('landingPage'); }
+function showHostScreen() { 
+    hidePanel('landingPage'); 
+    showPanel('hostPanel'); 
+    hidePanel('gameDashboard'); 
+    hidePanel('studentPanel'); 
+    renderQuestionBuilder(); 
+    updateQuestionsDisplay(); 
+}
+
+function showStudentScreen() { 
+    hidePanel('landingPage'); 
+    hidePanel('hostPanel'); 
+    hidePanel('gameDashboard'); 
+    showPanel('studentPanel'); 
+    document.getElementById('studentNameInput').value = ''; 
+    document.getElementById('gamePinInput').value = '';
+    document.getElementById('joinErrorMsg').innerHTML = '';
+    document.getElementById('waitingArea').classList.add('hidden');
+    document.getElementById('quizAreaStudent').classList.add('hidden');
+}
+
+function goBackToLanding() { 
+    if (gameUnsubscribe) gameUnsubscribe(); 
+    if (playersUnsubscribe) playersUnsubscribe(); 
+    if (questionUnsubscribe) questionUnsubscribe(); 
+    if (questionTimer) clearTimeout(questionTimer);
+    if (window.studentTimerInterval) clearInterval(window.studentTimerInterval);
+    
+    hidePanel('hostPanel'); 
+    hidePanel('gameDashboard'); 
+    hidePanel('studentPanel'); 
+    showPanel('landingPage'); 
+}
 
 // ==================== 3D BACKGROUND ====================
 function init3DBackground() {
     const canvas = document.getElementById('bgCanvas');
-    const scene = new THREE.Scene(); scene.background = new THREE.Color(0x050510);
+    if (!canvas) return;
+    
+    const scene = new THREE.Scene(); 
+    scene.background = new THREE.Color(0x050510);
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 5, 25);
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: false });
@@ -434,37 +671,66 @@ function init3DBackground() {
     const particles = new THREE.Points(particlesGeo, particlesMat);
     scene.add(particles);
     
-    const ambient = new THREE.AmbientLight(0x111122); scene.add(ambient);
-    const light = new THREE.PointLight(0x4488ff, 0.5); light.position.set(2, 3, 4); scene.add(light);
+    const ambient = new THREE.AmbientLight(0x111122); 
+    scene.add(ambient);
+    const light = new THREE.PointLight(0x4488ff, 0.5); 
+    light.position.set(2, 3, 4); 
+    scene.add(light);
     
     let time = 0;
-    function animate() { requestAnimationFrame(animate); time += 0.005; earth.rotation.y = time * 0.1; particles.rotation.y = time * 0.05; renderer.render(scene, camera); }
+    function animate() { 
+        requestAnimationFrame(animate); 
+        time += 0.005; 
+        earth.rotation.y = time * 0.1; 
+        particles.rotation.y = time * 0.05; 
+        renderer.render(scene, camera); 
+    }
     animate();
-    window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+    
+    window.addEventListener('resize', () => { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    });
 }
 
 // ==================== INITIALIZE ====================
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('App starting...');
     init3DBackground();
     
+    // Navigation buttons
     document.getElementById('hostNewGameBtn').onclick = showHostScreen;
     document.getElementById('joinGameBtn').onclick = showStudentScreen;
     document.getElementById('backFromHost').onclick = goBackToLanding;
     document.getElementById('backFromStudent').onclick = goBackToLanding;
     document.getElementById('exitGameBtn').onclick = goBackToLanding;
     
+    // Host question buttons
     document.getElementById('addQuestion').onclick = addNewQuestion;
     document.getElementById('addSample').onclick = addExampleQuestions;
     document.getElementById('clearAll').onclick = clearAllLocalQuestions;
     document.getElementById('questionType').onchange = renderQuestionBuilder;
     document.getElementById('createGame').onclick = createAndLaunchGame;
     
+    // Host game control buttons
     document.getElementById('startGameBtn').onclick = startGameHost;
     document.getElementById('nextQuestionBtn').onclick = sendNextQuestionHost;
     document.getElementById('endGameBtn').onclick = endGameHost;
     
+    // Student join button
     document.getElementById('joinGameBtn2').onclick = joinStudentGame;
+    
+    // Enter key support for student join
+    document.getElementById('gamePinInput')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') joinStudentGame();
+    });
+    document.getElementById('studentNameInput')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') joinStudentGame();
+    });
     
     renderQuestionBuilder();
     updateQuestionsDisplay();
+    
+    console.log('App ready!');
 });
