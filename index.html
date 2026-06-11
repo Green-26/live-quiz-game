@@ -3,226 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>🎯 SmartQuiz Live | Neural Network Arena</title>
+    <title>🎯 SmartQuiz Live | Real-time Quiz Game</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <canvas id="network-bg"></canvas>
+    <canvas id="bgCanvas"></canvas>
     
     <div class="container">
-        <header class="header">
-            <h1>🌐 SmartQuiz Live Arena</h1>
-            <p class="subtitle">Neural Network Powered | Real-time Scoring | Live Leaderboard</p>
+        <header>
+            <h1>🎯 SmartQuiz Live Arena</h1>
+            <p>Real-time Quiz | Live Leaderboard | 7 Question Types</p>
         </header>
 
-        <!-- Landing Page -->
+        <!-- LANDING PAGE -->
         <div id="landingPage">
-            <div class="card glass">
-                <h2 style="text-align:center; margin-bottom:20px;">Welcome to the Neural Arena</h2>
-                <div class="flex-row" style="justify-content:center;">
-                    <button id="teacherDashboardBtn" class="btn btn-primary glow">👨‍🏫 Create Quiz</button>
-                    <button id="hostNewGameBtn" class="btn btn-success glow">🎮 Host New Game</button>
-                    <button id="studentJoinBtn" class="btn btn-secondary glow">🎓 Join Game</button>
+            <div class="card">
+                <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+                    <button id="hostNewGameBtn" class="btn btn-success" style="padding: 20px 40px; font-size: 18px;">🎮 Host New Game</button>
+                    <button id="joinGameBtn" class="btn btn-primary" style="padding: 20px 40px; font-size: 18px;">🎓 Join Game</button>
                 </div>
             </div>
         </div>
 
-        <!-- Teacher Dashboard -->
-        <div id="teacherDashboard" class="hidden">
-            <div class="card glass">
-                <div class="flex-row space-between">
+        <!-- HOST PANEL - Create Questions -->
+        <div id="hostPanel" class="hidden">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h2>📝 Create Your Quiz</h2>
-                    <button id="backToLandingBtn" class="btn btn-secondary">← Back</button>
+                    <button id="backFromHost" class="btn btn-secondary">← Back</button>
                 </div>
             </div>
 
-            <div class="card glass">
-                <h3>✏️ Question Builder</h3>
-                <div class="flex-row">
-                    <select id="questionType" class="input-field">
+            <div class="card">
+                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                    <select id="questionType" class="input-field" style="flex:1">
                         <option value="multiple_choice">📋 Multiple Choice</option>
                         <option value="true_false">✓ True / False</option>
                         <option value="fill_blank">✏️ Fill in the Blank</option>
                         <option value="numeric">🔢 Numeric Answer</option>
                     </select>
-                    <select id="difficulty" class="input-field">
-                        <option value="easy">📘 Easy</option>
-                        <option value="medium">📙 Medium</option>
-                        <option value="hard">📕 Hard</option>
-                    </select>
-                    <select id="subject" class="input-field">
-                        <option value="general">🌍 General</option>
-                        <option value="math">📐 Math</option>
-                        <option value="science">🔬 Science</option>
-                        <option value="history">📜 History</option>
-                    </select>
-                </div>
-
-                <div id="questionFormContainer" class="mt-20"></div>
-
-                <div class="flex-row mt-20">
-                    <button id="addQuestionBtn" class="btn btn-primary">➕ Add</button>
-                    <button id="addSampleBtn" class="btn btn-secondary">📚 Sample</button>
-                    <button id="clearQuestionsBtn" class="btn btn-danger">🗑️ Clear</button>
-                </div>
-
-                <div id="questionsListContainer" class="questions-list mt-20"></div>
-            </div>
-
-            <div class="card glass" style="background: linear-gradient(135deg, #667eea30, #764ba230);">
-                <h3>🎮 Host Live Game</h3>
-                <button id="createGameAndHostBtn" class="btn btn-success" style="width:100%; padding:15px;">
-                    🚀 CREATE GAME & HOST
-                </button>
-            </div>
-        </div>
-
-        <!-- Direct Host Panel -->
-        <div id="directHostPanel" class="hidden">
-            <div class="card glass">
-                <div class="flex-row space-between">
-                    <h2>🎮 Host New Game</h2>
-                    <button id="backFromDirectHostBtn" class="btn btn-secondary">← Back</button>
-                </div>
-            </div>
-
-            <div class="card glass">
-                <h3>📝 Add Questions</h3>
-                <div class="flex-row">
-                    <select id="directQuestionType" class="input-field">
-                        <option value="multiple_choice">📋 Multiple Choice</option>
-                        <option value="true_false">✓ True / False</option>
-                        <option value="fill_blank">✏️ Fill Blank</option>
-                        <option value="numeric">🔢 Numeric</option>
-                    </select>
-                    <select id="directDifficulty" class="input-field">
+                    <select id="difficulty" class="input-field" style="flex:1">
                         <option value="easy">📘 Easy</option>
                         <option value="medium">📙 Medium</option>
                         <option value="hard">📕 Hard</option>
                     </select>
                 </div>
-
-                <div id="directQuestionFormContainer" class="mt-20"></div>
-
-                <div class="flex-row mt-20">
-                    <button id="directAddQuestionBtn" class="btn btn-primary">➕ Add</button>
-                    <button id="directAddSampleBtn" class="btn btn-secondary">📚 Sample</button>
-                    <button id="directClearQuestionsBtn" class="btn btn-danger">🗑️ Clear</button>
+                
+                <div id="questionForm"></div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button id="addQuestion" class="btn btn-primary">➕ Add Question</button>
+                    <button id="addSample" class="btn btn-secondary">📚 Sample Questions</button>
+                    <button id="clearAll" class="btn btn-danger">🗑️ Clear All</button>
                 </div>
+                
+                <div id="questionsList" class="questions-list" style="margin-top: 20px;"></div>
+            </div>
 
-                <div id="directQuestionsList" class="questions-list mt-20"></div>
-
-                <button id="finalizeHostGameBtn" class="btn btn-success" style="width:100%; margin-top:20px; padding:15px;">
-                    🚀 START GAME NOW
-                </button>
+            <div class="card">
+                <button id="createGame" class="btn btn-success" style="width: 100%; padding: 15px; font-size: 16px;">🚀 CREATE GAME & HOST NOW</button>
             </div>
         </div>
 
-        <!-- Active Game Dashboard -->
-        <div id="activeGameDashboard" class="hidden">
-            <div class="card glass">
-                <div class="flex-row space-between">
-                    <div>
-                        <div class="pin-display">🎲 PIN: <strong id="gamePinDisplay">------</strong></div>
-                    </div>
-                    <div class="button-group">
-                        <button id="previewGameBtn" class="btn btn-info">👁️ Preview</button>
-                        <button id="startGameBtn" class="btn btn-success">▶️ START</button>
-                        <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ NEXT</button>
-                        <button id="endGameBtn" class="btn btn-danger" disabled>🏁 END</button>
-                        <button id="exitGameBtn" class="btn btn-secondary">🚪 Exit</button>
+        <!-- ACTIVE GAME DASHBOARD (Teacher Controls) -->
+        <div id="gameDashboard" class="hidden">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div class="pin-display">🎲 GAME PIN: <strong id="gamePin">------</strong></div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button id="startGameBtn" class="btn btn-success">▶️ START GAME</button>
+                        <button id="nextQuestionBtn" class="btn btn-warning" disabled>⏩ NEXT QUESTION</button>
+                        <button id="endGameBtn" class="btn btn-danger">🏁 END GAME</button>
+                        <button id="exitGameBtn" class="btn btn-secondary">🚪 EXIT</button>
                     </div>
                 </div>
             </div>
 
-            <div class="card glass">
-                <div id="gameStatusMessage" class="status-message">📌 Game created. Click START to begin!</div>
+            <div class="card">
+                <div id="gameStatusMsg" class="status-message">📌 Game created. Share PIN with students. Click START when ready.</div>
             </div>
 
-            <div class="card glass">
+            <div class="card">
                 <h3>📢 Current Question</h3>
-                <div id="currentQuestionDisplay">No active question</div>
+                <div id="currentQuestionDisplay">No active question yet. Click START GAME then NEXT QUESTION.</div>
             </div>
 
             <div class="two-columns">
-                <div class="card glass">
+                <div class="card">
                     <h3>🏆 Live Leaderboard</h3>
-                    <div id="leaderboardList" class="leaderboard">Waiting...</div>
-                    <div id="playerCount" class="player-count"></div>
+                    <div id="leaderboardList">Waiting for players...</div>
+                    <div id="playerCount" class="player-count" style="margin-top: 15px;"></div>
                 </div>
-                <div class="card glass">
-                    <h3>📊 Analytics</h3>
-                    <div id="analyticsDisplay"></div>
+                <div class="card">
+                    <h3>📊 Game Statistics</h3>
+                    <div id="statsDisplay"></div>
                 </div>
             </div>
         </div>
 
-        <!-- Student Join Page -->
-        <div id="studentJoinPage" class="hidden">
-            <div class="card glass">
-                <div class="flex-row space-between">
-                    <h2>🎓 Join Live Game</h2>
-                    <button id="backToLandingFromStudentBtn" class="btn btn-secondary">← Back</button>
+        <!-- STUDENT PANEL -->
+        <div id="studentPanel" class="hidden">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2>🎓 Join a Live Game</h2>
+                    <button id="backFromStudent" class="btn btn-secondary">← Back</button>
                 </div>
             </div>
 
-            <div class="card glass">
-                <div class="flex-row">
-                    <input type="text" id="studentNameInput" placeholder="Your Name" class="input-field">
-                    <input type="text" id="gamePinInput" placeholder="Game PIN" class="input-field">
-                    <button id="joinGameBtn" class="btn btn-primary">🎮 Join</button>
-                </div>
-                <div id="joinError" class="error-message mt-20"></div>
+            <div class="card">
+                <input type="text" id="studentNameInput" class="input-field" placeholder="Enter your name">
+                <input type="text" id="gamePinInput" class="input-field" placeholder="Enter Game PIN">
+                <button id="joinGameBtn2" class="btn btn-primary" style="width: 100%;">🎮 Join Game</button>
+                <div id="joinErrorMsg" class="error-message" style="margin-top: 15px;"></div>
             </div>
 
-            <div id="studentWaitingArea" class="card glass text-center hidden">
+            <div id="waitingArea" class="card text-center hidden">
                 <div class="spinner">⏳</div>
-                <h3>Waiting for Host...</h3>
+                <h3>Waiting for host to start the game...</h3>
+                <p>Get ready for the quiz!</p>
             </div>
 
-            <div id="studentQuizArea" class="hidden">
-                <div class="card glass">
-                    <div class="flex-row space-between">
+            <div id="quizAreaStudent" class="hidden">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
                         <div>👤 <strong id="studentNameDisplay"></strong></div>
-                        <div>🎲 <strong id="studentPinDisplay"></strong></div>
-                        <div>⭐ <strong id="studentScoreDisplay">0</strong></div>
+                        <div>🎲 PIN: <strong id="pinDisplay"></strong></div>
+                        <div>⭐ Score: <strong id="scoreDisplay">0</strong></div>
                     </div>
                 </div>
-                <div class="card glass">
+                <div class="card">
                     <div id="questionContainer"></div>
-                    <div class="timer-circle" id="timerCircle">15</div>
-                    <div id="answerFeedback"></div>
+                    <div class="timer-circle" id="timerDisplay">15</div>
+                    <div id="feedbackArea" class="mt-20"></div>
                 </div>
             </div>
 
-            <div id="studentResultsArea" class="hidden"></div>
-        </div>
-    </div>
-
-    <!-- Preview Modal -->
-    <div id="previewModal" class="modal hidden">
-        <div class="modal-content glass">
-            <div class="modal-header">
-                <h2>📋 Quiz Preview</h2>
-                <button id="closeModal" class="modal-close">&times;</button>
-            </div>
-            <div id="previewContent" class="modal-body"></div>
-            <div class="modal-footer">
-                <button id="closeModalBtn" class="btn btn-primary">Close</button>
-            </div>
+            <div id="resultsArea" class="hidden"></div>
         </div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
     <script src="config.js"></script>
-    <script src="questions.js"></script>
-    <script src="game-host.js"></script>
-    <script src="game-player.js"></script>
-    <script src="ui.js"></script>
-    <script src="background.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
