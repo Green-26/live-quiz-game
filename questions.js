@@ -1,251 +1,137 @@
-// ==================== QUESTION FUNCTIONS ====================
+// ==================== QUESTIONS MODULE ====================
+
+let myQuestions = [];
 
 function renderQuestionForm() {
-    const type = document.getElementById('questionType').value;
-    const container = document.getElementById('questionFormContainer');
-    
-    let html = '<input type="text" id="questionText" class="input-field mb-20" placeholder="Enter your question...">';
-    
-    if (type === 'multiple_choice') {
+    const type = document.getElementById('qType').value;
+    const container = document.getElementById('questionForm');
+
+    let html = '<input type="text" id="qText" class="input" placeholder="Enter your question...">';
+
+    if (type === 'mc') {
         html += `
-            <input type="text" id="opt1" class="input-field mb-20" placeholder="Option A">
-            <input type="text" id="opt2" class="input-field mb-20" placeholder="Option B">
-            <input type="text" id="opt3" class="input-field mb-20" placeholder="Option C">
-            <input type="text" id="opt4" class="input-field mb-20" placeholder="Option D">
-            <select id="correctOpt" class="input-field mb-20">
-                <option value="0">Option A is correct</option>
-                <option value="1">Option B is correct</option>
-                <option value="2">Option C is correct</option>
-                <option value="3">Option D is correct</option>
+            <input type="text" id="opt1" class="input" placeholder="Option A">
+            <input type="text" id="opt2" class="input" placeholder="Option B">
+            <input type="text" id="opt3" class="input" placeholder="Option C">
+            <input type="text" id="opt4" class="input" placeholder="Option D">
+            <select id="correctOpt" class="input">
+                <option value="0">A is correct</option>
+                <option value="1">B is correct</option>
+                <option value="2">C is correct</option>
+                <option value="3">D is correct</option>
             </select>
         `;
-    } else if (type === 'true_false') {
-        html += `
-            <select id="correctOpt" class="input-field mb-20">
-                <option value="true">True</option>
-                <option value="false">False</option>
-            </select>
-        `;
-    } else if (type === 'fill_blank') {
-        html += `<input type="text" id="correctAnswer" class="input-field mb-20" placeholder="Correct answer">`;
-    } else if (type === 'numeric') {
-        html += `
-            <input type="number" id="correctValue" class="input-field mb-20" placeholder="Correct answer">
-            <input type="text" id="unit" class="input-field mb-20" placeholder="Unit (optional)">
-        `;
+    } else if (type === 'tf') {
+        html += `<select id="correctOpt" class="input"><option value="true">True</option><option value="false">False</option></select>`;
+    } else if (type === 'fb') {
+        html += `<input type="text" id="correctAns" class="input" placeholder="Correct answer">`;
+    } else if (type === 'num') {
+        html += `<input type="number" id="correctVal" class="input" placeholder="Correct answer">`;
     }
-    
-    html += `
-        <input type="text" id="explanation" class="input-field mb-20" placeholder="Explanation (optional)">
-        <input type="number" id="points" class="input-field" placeholder="Points" value="100">
-    `;
-    
+
+    html += `<input type="number" id="points" class="input" placeholder="Points" value="100">`;
     container.innerHTML = html;
 }
 
 function buildQuestion() {
-    const type = document.getElementById('questionType').value;
-    const text = document.getElementById('questionText')?.value.trim();
-    const difficulty = document.getElementById('difficulty').value;
-    const subject = document.getElementById('subject').value;
+    const type = document.getElementById('qType').value;
+    const text = document.getElementById('qText')?.value.trim();
+    const diff = document.getElementById('difficulty').value;
     const points = parseInt(document.getElementById('points')?.value) || 100;
-    const explanation = document.getElementById('explanation')?.value || '';
-    
-    if (!text) {
-        alert('Please enter a question');
-        return null;
+
+    if (!text) { showToast('Please enter a question', 'error'); return null; }
+
+    const q = { id: Date.now(), type, text, difficulty: diff, points };
+
+    if (type === 'mc') {
+        const o1 = document.getElementById('opt1')?.value.trim();
+        const o2 = document.getElementById('opt2')?.value.trim();
+        const o3 = document.getElementById('opt3')?.value.trim();
+        const o4 = document.getElementById('opt4')?.value.trim();
+        if (!o1 || !o2 || !o3 || !o4) { showToast('All options required', 'error'); return null; }
+        q.options = [o1, o2, o3, o4];
+        q.correct = parseInt(document.getElementById('correctOpt').value);
+    } else if (type === 'tf') {
+        q.correct = document.getElementById('correctOpt').value === 'true';
+    } else if (type === 'fb') {
+        const ca = document.getElementById('correctAns')?.value.trim();
+        if (!ca) { showToast('Correct answer required', 'error'); return null; }
+        q.correct = ca;
+    } else if (type === 'num') {
+        const cv = parseFloat(document.getElementById('correctVal')?.value);
+        if (isNaN(cv)) { showToast('Correct value required', 'error'); return null; }
+        q.correct = cv;
+        q.unit = '';
     }
-    
-    const question = {
-        id: Date.now(),
-        type: type,
-        text: text,
-        difficulty: difficulty,
-        subject: subject,
-        points: points,
-        explanation: explanation
-    };
-    
-    if (type === 'multiple_choice') {
-        const opt1 = document.getElementById('opt1')?.value.trim();
-        const opt2 = document.getElementById('opt2')?.value.trim();
-        const opt3 = document.getElementById('opt3')?.value.trim();
-        const opt4 = document.getElementById('opt4')?.value.trim();
-        
-        if (!opt1 || !opt2 || !opt3 || !opt4) {
-            alert('All options are required');
-            return null;
-        }
-        
-        question.options = [opt1, opt2, opt3, opt4];
-        question.correctAnswer = parseInt(document.getElementById('correctOpt').value);
-    } else if (type === 'true_false') {
-        question.correctAnswer = document.getElementById('correctOpt').value === 'true';
-    } else if (type === 'fill_blank') {
-        const correct = document.getElementById('correctAnswer')?.value.trim();
-        if (!correct) {
-            alert('Correct answer is required');
-            return null;
-        }
-        question.correctAnswer = correct;
-    } else if (type === 'numeric') {
-        const correct = parseFloat(document.getElementById('correctValue')?.value);
-        if (isNaN(correct)) {
-            alert('Correct answer is required');
-            return null;
-        }
-        question.correctAnswer = correct;
-        question.unit = document.getElementById('unit')?.value || '';
-        question.tolerance = 0;
-    }
-    
-    return question;
+    return q;
 }
 
-function renderQuestionsList() {
-    const container = document.getElementById('questionsListContainer');
-    
-    if (!currentQuestions || currentQuestions.length === 0) {
-        container.innerHTML = '<p style="text-align:center; color:#718096; padding:20px;">📭 No questions yet. Add some above!</p>';
+function renderQuestions() {
+    const container = document.getElementById('questionsList');
+    if (!myQuestions.length) {
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 30px;">📭 No questions yet. Add some above!</p>';
         return;
     }
-    
-    container.innerHTML = currentQuestions.map((q, i) => `
-        <div class="question-item">
+
+    const typeLabels = { mc: 'Multiple Choice', tf: 'True/False', fb: 'Fill Blank', num: 'Numeric' };
+    const badgeClasses = { mc: 'badge-mc', tf: 'badge-tf', fb: 'badge-fb', num: 'badge-num' };
+
+    container.innerHTML = myQuestions.map((q, i) => `
+        <div class="q-item">
             <div>
-                <span class="question-badge">${q.type.replace('_', ' ')}</span>
-                <strong>Q${i+1}:</strong> ${escapeHtml(q.text.substring(0, 50))}
-                <span style="margin-left:10px;">🎯 ${q.points} pts</span>
+                <span class="badge ${badgeClasses[q.type] || 'badge-mc'}">${typeLabels[q.type] || q.type}</span>
+                <strong style="margin-left: 8px;">${i+1}.</strong> ${escapeHtml(q.text.substring(0, 55))}${q.text.length > 55 ? '...' : ''}
+                <span style="margin-left: 10px; color: var(--text-secondary);">🎯 ${q.points} pts</span>
             </div>
-            <button class="remove-btn" data-index="${i}">✖ Remove</button>
+            <button class="remove-q" data-idx="${i}">✖ Remove</button>
         </div>
     `).join('');
-    
-    document.querySelectorAll('.remove-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const index = parseInt(btn.dataset.index);
-            if (confirm('Remove this question?')) {
-                currentQuestions.splice(index, 1);
-                renderQuestionsList();
-                saveQuestionsToLocal();
-            }
-        });
+
+    document.querySelectorAll('.remove-q').forEach(btn => {
+        btn.onclick = () => {
+            const idx = parseInt(btn.dataset.idx);
+            myQuestions.splice(idx, 1);
+            renderQuestions();
+            showToast('Question removed', 'info');
+        };
     });
 }
 
-function saveQuestionsToLocal() {
-    localStorage.setItem('teacherQuiz', JSON.stringify(currentQuestions));
-}
-
-function loadQuestionsFromLocal() {
-    const saved = localStorage.getItem('teacherQuiz');
-    if (saved) {
-        currentQuestions = JSON.parse(saved);
-        renderQuestionsList();
-    }
-}
-
-function addSampleQuestions() {
-    const samples = [
-        { id: Date.now()+1, type: 'multiple_choice', text: 'What is the capital of France?', options: ['London', 'Paris', 'Berlin', 'Madrid'], correctAnswer: 1, difficulty: 'easy', subject: 'geography', points: 100, explanation: 'Paris is the capital of France' },
-        { id: Date.now()+2, type: 'true_false', text: 'The Earth is flat', correctAnswer: false, difficulty: 'easy', subject: 'science', points: 50, explanation: 'The Earth is actually round' },
-        { id: Date.now()+3, type: 'numeric', text: 'What is 15 + 27?', correctAnswer: 42, difficulty: 'easy', subject: 'math', points: 75 },
-        { id: Date.now()+4, type: 'fill_blank', text: 'Water freezes at ______ degrees Celsius', correctAnswer: '0', difficulty: 'easy', subject: 'science', points: 50 }
-    ];
-    
-    currentQuestions.push(...samples);
-    renderQuestionsList();
-    saveQuestionsToLocal();
-    alert(`Added ${samples.length} sample questions!`);
-}
-
-function clearAllQuestions() {
-    if (confirm('⚠️ Clear ALL questions?')) {
-        currentQuestions = [];
-        renderQuestionsList();
-        saveQuestionsToLocal();
-        alert('All questions cleared');
-    }
-}
-
 function addQuestion() {
-    const question = buildQuestion();
-    if (!question) return;
-    
-    currentQuestions.push(question);
-    renderQuestionsList();
-    saveQuestionsToLocal();
-    
-    // Clear form
-    document.getElementById('questionText').value = '';
-    if (document.getElementById('opt1')) document.getElementById('opt1').value = '';
-    if (document.getElementById('opt2')) document.getElementById('opt2').value = '';
-    if (document.getElementById('opt3')) document.getElementById('opt3').value = '';
-    if (document.getElementById('opt4')) document.getElementById('opt4').value = '';
-    
-    alert('Question added!');
-}
-
-function getCorrectAnswerText(question) {
-    switch(question.type) {
-        case 'multiple_choice': return question.options[question.correctAnswer];
-        case 'true_false': return question.correctAnswer ? 'True' : 'False';
-        case 'fill_blank': return question.correctAnswer;
-        case 'numeric': return `${question.correctAnswer} ${question.unit || ''}`;
-        default: return 'Unknown';
+    const q = buildQuestion();
+    if (q) {
+        myQuestions.push(q);
+        renderQuestions();
+        document.getElementById('qText').value = '';
+        ['opt1','opt2','opt3','opt4','correctAns','correctVal'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        showToast('Question added!', 'success');
     }
 }
 
-function validateAnswer(question, answer) {
-    switch(question.type) {
-        case 'multiple_choice': return answer === question.correctAnswer;
-        case 'true_false': return String(answer) === String(question.correctAnswer);
-        case 'fill_blank': return String(answer).toLowerCase().trim() === String(question.correctAnswer).toLowerCase();
-        case 'numeric': return Math.abs(parseFloat(answer) - question.correctAnswer) <= (question.tolerance || 0);
-        default: return false;
+function addSamples() {
+    myQuestions.push({ id: Date.now()+1, type: 'mc', text: 'What is the capital of France?', options: ['London','Paris','Berlin','Madrid'], correct: 1, difficulty: 'easy', points: 100 });
+    myQuestions.push({ id: Date.now()+2, type: 'tf', text: 'The Earth is flat', correct: false, difficulty: 'easy', points: 50 });
+    myQuestions.push({ id: Date.now()+3, type: 'num', text: 'What is 15 + 27?', correct: 42, difficulty: 'easy', points: 75 });
+    myQuestions.push({ id: Date.now()+4, type: 'fb', text: 'Water freezes at ______ degrees Celsius', correct: '0', difficulty: 'easy', points: 50 });
+    renderQuestions();
+    showToast('4 sample questions added!', 'success');
+}
+
+function clearQuestions() {
+    if (confirm('⚠️ Clear ALL questions?')) {
+        myQuestions = [];
+        renderQuestions();
+        showToast('All questions cleared', 'info');
     }
 }
 
-function calculatePoints(question, timeLeft, isCorrect) {
-    if (!isCorrect) return 0;
-    const bonus = Math.floor((timeLeft / 15) * 50);
-    const multiplier = { easy: 1, medium: 1.5, hard: 2 };
-    return Math.floor((question.points + bonus) * (multiplier[question.difficulty] || 1));
-}
-
-function renderQuestionForPlayer(question) {
-    switch(question.type) {
-        case 'multiple_choice':
-            return `
-                <h2>${escapeHtml(question.text)}</h2>
-                <div class="options-container">
-                    ${question.options.map((opt, i) => `
-                        <div class="option" data-answer="${i}">${String.fromCharCode(65+i)}. ${escapeHtml(opt)}</div>
-                    `).join('')}
-                </div>
-            `;
-        case 'true_false':
-            return `
-                <h2>${escapeHtml(question.text)}</h2>
-                <div class="tf-options">
-                    <div class="tf-option true" data-answer="true">✅ TRUE</div>
-                    <div class="tf-option false" data-answer="false">❌ FALSE</div>
-                </div>
-            `;
-        case 'fill_blank':
-            return `
-                <h2>${escapeHtml(question.text)}</h2>
-                <input type="text" id="fillAnswer" class="blank-input" placeholder="Type your answer...">
-                <button id="submitAnswerBtn" class="btn btn-primary">Submit Answer</button>
-            `;
-        case 'numeric':
-            return `
-                <h2>${escapeHtml(question.text)}</h2>
-                <input type="number" id="numericAnswer" class="blank-input" placeholder="Enter number...">
-                ${question.unit ? `<p>Unit: ${escapeHtml(question.unit)}</p>` : ''}
-                <button id="submitAnswerBtn" class="btn btn-primary">Submit Answer</button>
-            `;
-        default:
-            return `<h2>${escapeHtml(question.text)}</h2>`;
-    }
+function getCorrectAnswerText(q) {
+    if (q.type === 'mc') return q.options[q.correct];
+    if (q.type === 'tf') return q.correct ? 'True' : 'False';
+    if (q.type === 'fb') return q.correct;
+    if (q.type === 'num') return `${q.correct}`;
+    return 'Unknown';
 }
