@@ -1,10 +1,11 @@
-// ==================== QUESTIONS MODULE ====================
+// ==================== QUESTIONS MODULE - COMPLETE ====================
 
 let myQuestions = [];
 
 function renderQuestionForm() {
     const type = document.getElementById('qType').value;
     const container = document.getElementById('questionForm');
+    if (!container) return;
 
     let html = '<input type="text" id="qText" class="input" placeholder="Enter your question...">';
 
@@ -68,6 +69,8 @@ function buildQuestion() {
 
 function renderQuestions() {
     const container = document.getElementById('questionsList');
+    if (!container) return;
+
     if (!myQuestions.length) {
         container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 30px;">📭 No questions yet. Add some above!</p>';
         return;
@@ -102,6 +105,7 @@ function addQuestion() {
     if (q) {
         myQuestions.push(q);
         renderQuestions();
+        // Clear inputs
         document.getElementById('qText').value = '';
         ['opt1','opt2','opt3','opt4','correctAns','correctVal'].forEach(id => {
             const el = document.getElementById(id);

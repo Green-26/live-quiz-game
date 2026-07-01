@@ -3,7 +3,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 SmartQuiz Live v2.0 starting...');
 
-    // Initialize 3D background
     init3D();
 
     // Navigation
@@ -13,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('backStudentBtn').onclick = backToLanding;
     document.getElementById('exitControl').onclick = backToLanding;
 
-    // Host panel
+    // Host panel - Question creation
     document.getElementById('addQBtn').onclick = addQuestion;
     document.getElementById('sampleBtn').onclick = addSamples;
     document.getElementById('clearBtn').onclick = clearQuestions;
@@ -31,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
         joinGame();
     };
 
-    // Enter key support
     document.getElementById('studentName').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             setLoading(true, 'Joining game...');
@@ -45,10 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Render initial form
     renderQuestionForm();
-
-    // Check for session restore
     restoreActiveSession();
 
     console.log('✅ SmartQuiz Live v2.0 ready!');

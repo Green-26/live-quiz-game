@@ -1,4 +1,4 @@
-// ==================== GAME HOST MODULE - COMPLETE FIXED ====================
+// ==================== GAME HOST MODULE - COMPLETE ====================
 
 let currentQuestionIndex = -1;
 let totalQuestionsCount = 0;
@@ -46,7 +46,7 @@ async function createGame() {
             const currentQDiv = document.getElementById('currentQDisplay');
             const statusDiv = document.getElementById('statusMsg');
 
-            console.log('Game status update:', data.status, 'currentIndex:', data.currentIndex, 'waitingForNext:', data.waitingForNext);
+            console.log('Game update:', data.status, 'Index:', data.currentIndex, 'Waiting:', data.waitingForNext);
 
             if (data.status === 'active') {
                 if (startBtn) { startBtn.disabled = true; startBtn.textContent = '✓ ACTIVE'; }
@@ -192,7 +192,7 @@ async function nextQuestion() {
             questionTimerInterval = null;
         }
 
-        // Update game with new question index - SET waitingForNext to FALSE
+        // Update game with new question index
         await currentGameRef.update({
             currentIndex: nextIdx,
             waitingForNext: false
@@ -228,7 +228,6 @@ async function nextQuestion() {
 
                     if (statusDiv) statusDiv.innerHTML = `⏰ Time's up for Question ${nextIdx+1}! Click NEXT to continue.`;
                     if (nextBtn) {
-                        // Check if there are more questions
                         const gameDoc = await currentGameRef.get();
                         const gameData = gameDoc.data();
                         const hasMore = nextIdx + 1 < gameData.questions.length;

@@ -1,4 +1,4 @@
-// ==================== UI NAVIGATION MODULE - COMPLETE FIXED ====================
+// ==================== UI NAVIGATION MODULE - COMPLETE ====================
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
@@ -63,7 +63,6 @@ function cleanupListeners() {
     if (studentTimerInterval) { clearInterval(studentTimerInterval); studentTimerInterval = null; }
 }
 
-// Navigation functions
 function showHost() {
     hide('landingPage');
     show('hostPanel');
