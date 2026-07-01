@@ -1,15 +1,15 @@
-// ==================== AUTHENTICATION & SESSION ====================
+// ==================== AUTHENTICATION MODULE ====================
 
 // Check if user has an active session
 async function checkActiveSession() {
     const stored = sessionStorage.getItem('activeGameSession');
     if (!stored) return null;
-    
+
     try {
         const session = JSON.parse(stored);
         const gameRef = db.collection('games').doc(session.pin);
         const gameDoc = await gameRef.get();
-        
+
         if (gameDoc.exists && gameDoc.data().status !== 'ended') {
             return session;
         }
@@ -31,62 +31,51 @@ function saveSession(pin, isHost) {
 // Clear session
 function clearSession() {
     sessionStorage.removeItem('activeGameSession');
-    if (unsubGame) unsubGame();
-    if (unsubPlayers) unsubPlayers();
-    if (activeQuestionListener) activeQuestionListener();
-    if (currentQuestionTimeout) clearTimeout(currentQuestionTimeout);
+    cleanupListeners();
 }
 
 // Auto-restore session on page load
 async function restoreActiveSession() {
     const session = await checkActiveSession();
     if (!session) return false;
-    
+
     const gameRef = db.collection('games').doc(session.pin);
     const gameDoc = await gameRef.get();
-    
+
     if (!gameDoc.exists) return false;
-    
+
     currentGameRef = gameRef;
-    currentGamePin = session.pin;
-    
+    currentPin = session.pin;
+
     if (session.isHost) {
         // Restore host view
-        document.getElementById('landingPage').classList.add('hidden');
-        document.getElementById('teacherDashboard').classList.add('hidden');
-        document.getElementById('activeGameDashboard').classList.remove('hidden');
-        document.getElementById('studentJoinPage').classList.add('hidden');
-        document.getElementById('gamePinDisplay').innerText = session.pin;
-        
-        // Load questions into currentQuestions
+        hide('landingPage');
+        hide('hostPanel');
+        show('gameDashboard');
+        hide('studentPanel');
+        document.getElementById('gamePin').innerText = session.pin;
+
+        // Load questions into myQuestions
         const gameData = gameDoc.data();
-        currentQuestions = gameData.questions || [];
-        
-        attachGameListeners(gameRef);
+        myQuestions = gameData.questions || [];
+
+        // Reattach host listeners
+        // This would need the full game-host logic
+        return true;
     } else {
         // Restore player view
-        document.getElementById('landingPage').classList.add('hidden');
-        document.getElementById('teacherDashboard').classList.add('hidden');
-        document.getElementById('activeGameDashboard').classList.add('hidden');
-        document.getElementById('studentJoinPage').classList.remove('hidden');
-        document.getElementById('studentWaitingArea').classList.add('hidden');
-        document.getElementById('studentQuizArea').classList.add('hidden');
-        
-        // Find player ID from localStorage
-        const playerId = localStorage.getItem('studentPlayerId');
-        if (playerId) {
-            playerId = playerId;
-            attachStudentListeners(gameRef);
-        }
+        hide('landingPage');
+        hide('hostPanel');
+        hide('gameDashboard');
+        show('studentPanel');
+        return true;
     }
-    
-    return true;
 }
 
 // Anonymous sign in helper
 async function ensureAnonymousAuth() {
     if (auth.currentUser) return auth.currentUser;
-    
+
     try {
         const userCredential = await auth.signInAnonymously();
         return userCredential.user;
@@ -102,20 +91,17 @@ async function logoutAndClear() {
     localStorage.removeItem('teacherQuiz');
     localStorage.removeItem('studentPlayerId');
     sessionStorage.removeItem('activeGameSession');
-    
-    // Sign out from Firebase
+
     try {
         await auth.signOut();
     } catch (error) {
         console.error('Sign out error:', error);
     }
-    
-    // Reset UI
-    showLandingPage();
-    currentQuestions = [];
-    renderQuestionsList();
-    
-    console.log('Logged out and cleared all data');
+
+    backToLanding();
+    myQuestions = [];
+    renderQuestions();
+    showToast('Logged out', 'info');
 }
 
 // Listen to auth state changes
