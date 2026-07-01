@@ -1,235 +1,376 @@
-// ==================== PLAYER FUNCTIONS ====================
-let playerGameRef = null;
-let playerId = null;
+// ==================== GAME PLAYER MODULE ====================
+
+let myStudentId = null;
+let canAnswer = true;
 let hasAnsweredCurrent = false;
 
-async function joinGameAsStudent() {
-    const name = document.getElementById('studentNameInput').value.trim();
-    const pin = document.getElementById('gamePinInput').value.trim();
-    
+async function joinGame() {
+    const name = document.getElementById('studentName').value.trim();
+    const pin = document.getElementById('gamePinStudent').value.trim();
+
+    const errorEl = document.getElementById('joinError');
+    errorEl.classList.add('hidden');
+    errorEl.innerHTML = '';
+
     if (!name || !pin) {
-        document.getElementById('joinError').innerText = 'Please enter your name and game PIN';
+        errorEl.classList.remove('hidden');
+        errorEl.innerHTML = 'Please enter your name and game PIN';
         return;
     }
-    
-    setLoading('Joining game');
-    
+
+    if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+        errorEl.classList.remove('hidden');
+        errorEl.innerHTML = 'PIN must be exactly 6 digits';
+        return;
+    }
+
+    setLoading(true, 'Joining game...');
+
     try {
         const gameRef = db.collection('games').doc(pin);
         const gameDoc = await gameRef.get();
-        
+
         if (!gameDoc.exists) {
-            document.getElementById('joinError').innerText = 'Game not found! Check the PIN.';
+            errorEl.classList.remove('hidden');
+            errorEl.innerHTML = 'Game not found! Check the PIN and try again.';
+            setLoading(false);
             return;
         }
-        
+
         const gameData = gameDoc.data();
         if (gameData.status === 'ended') {
-            document.getElementById('joinError').innerText = 'This game has already ended.';
+            errorEl.classList.remove('hidden');
+            errorEl.innerHTML = 'This game has already ended.';
+            setLoading(false);
             return;
         }
-        
+
         const user = await auth.signInAnonymously();
-        playerId = user.user.uid;
-        playerGameRef = gameRef;
-        
-        await gameRef.collection('players').doc(playerId).set({
+        myStudentId = user.user.uid;
+        currentGameRef = gameRef;
+        currentPin = pin;
+        saveSession(pin, false);
+
+        await gameRef.collection('players').doc(myStudentId).set({
             name: name,
             score: 0,
             joinedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        
-        document.getElementById('studentJoinPage').classList.add('hidden');
-        document.getElementById('studentWaitingArea').classList.remove('hidden');
-        document.getElementById('studentNameDisplay').innerText = name;
-        document.getElementById('studentPinDisplay').innerText = pin;
-        
-        attachStudentListeners(gameRef);
-        
-    } catch (error) {
-        console.error(error);
-        document.getElementById('joinError').innerText = 'Failed to join: ' + error.message;
-    }
-}
 
-function attachStudentListeners(gameRef) {
-    if (unsubGame) unsubGame();
-    if (activeQuestionListener) activeQuestionListener();
-    
-    unsubGame = gameRef.onSnapshot(doc => {
-        if (!doc.exists) return;
-        const data = doc.data();
-        
-        if (data.status === 'created') {
-            document.getElementById('studentWaitingArea').classList.remove('hidden');
-            document.getElementById('studentQuizArea').classList.add('hidden');
-            document.getElementById('studentResultsArea').classList.add('hidden');
-        } else if (data.status === 'active') {
-            document.getElementById('studentWaitingArea').classList.add('hidden');
-            document.getElementById('studentQuizArea').classList.remove('hidden');
-            document.getElementById('studentResultsArea').classList.add('hidden');
-        } else if (data.status === 'ended') {
-            document.getElementById('studentQuizArea').classList.add('hidden');
-            showStudentResults(gameRef);
-        }
-    });
-    
-    const activeRef = gameRef.collection('activeQuestion').doc('current');
-    activeQuestionListener = activeRef.onSnapshot(async (snap) => {
-        if (!snap.exists || !snap.data().isActive) {
-            document.getElementById('questionContainer').innerHTML = '<div class="text-center">⏳ Waiting for next question...</div>';
-            return;
-        }
-        
-        hasAnsweredCurrent = false;
-        const data = snap.data();
-        const question = data.question;
-        const expiresAt = data.expiresAt.toDate();
-        const qIndex = data.questionIndex;
-        
-        document.getElementById('questionContainer').innerHTML = renderQuestionForPlayer(question);
-        startStudentTimer(expiresAt);
-        
-        const answerHandler = async (answer) => {
-            if (hasAnsweredCurrent) {
-                document.getElementById('answerFeedback').innerHTML = '<p style="color:#ed8936;">Already answered!</p>';
+        hide('studentPanel');
+        show('waitingArea');
+        document.getElementById('studentNameDisplay').innerText = name;
+        document.getElementById('pinDisplay').innerText = pin;
+        document.getElementById('scoreDisplay').innerText = '0';
+
+        // Listen to game status
+        unsubGame = gameRef.onSnapshot((doc) => {
+            if (!doc.exists) return;
+            const data = doc.data();
+
+            if (data.status === 'waiting') {
+                hide('quizArea');
+                show('waitingArea');
+                hide('resultsArea');
+            } else if (data.status === 'active') {
+                hide('waitingArea');
+                show('quizArea');
+                hide('resultsArea');
+            } else if (data.status === 'ended') {
+                hide('quizArea');
+                hide('waitingArea');
+                showResults();
+            }
+        });
+
+        // FIXED: Listen to active question
+        unsubQuestion = gameRef.collection('activeQuestion').doc('current').onSnapshot((snap) => {
+            console.log('📢 Student received question update:', snap.exists, snap.data()?.isActive);
+
+            const qd = document.getElementById('questionDisplay');
+            const fb = document.getElementById('feedback');
+            const timerDiv = document.getElementById('timer');
+
+            if (!snap.exists) {
+                if (qd) qd.innerHTML = '<div class="text-center" style="color: var(--text-secondary); padding: 40px;">⏳ Waiting for question...</div>';
                 return;
             }
-            hasAnsweredCurrent = true;
-            await submitStudentAnswer(gameRef, answer, question, qIndex, expiresAt);
-        };
-        
-        attachStudentAnswerListeners(question, answerHandler);
-    });
-    
-    const scoreRef = gameRef.collection('players').doc(playerId);
-    if (unsubPlayers) unsubPlayers();
-    unsubPlayers = scoreRef.onSnapshot(doc => {
-        if (doc.exists) {
-            document.getElementById('studentScoreDisplay').innerText = doc.data()?.score || 0;
-        }
-    });
-}
 
-function attachStudentAnswerListeners(question, handler) {
-    if (question.type === 'multiple_choice') {
-        document.querySelectorAll('.option').forEach(opt => {
-            opt.onclick = () => handler(parseInt(opt.dataset.answer));
+            const questionData = snap.data();
+
+            // If question is not active, show waiting message
+            if (!questionData.isActive) {
+                if (qd) qd.innerHTML = '<div class="text-center" style="color: var(--text-secondary); padding: 40px;">⏳ Getting next question ready...</div>';
+                if (timerDiv) timerDiv.innerText = '15';
+                if (fb) fb.innerHTML = '';
+                return;
+            }
+
+            // Reset answer state for new question
+            canAnswer = true;
+            hasAnsweredCurrent = false;
+
+            const question = questionData.question;
+            const expiry = questionData.expiresAt.toDate();
+            const qIdx = questionData.index;
+
+            console.log('📢 Rendering question:', question.text, 'index:', qIdx);
+
+            // Clear previous feedback and reset timer
+            if (fb) fb.innerHTML = '';
+            if (timerDiv) {
+                timerDiv.innerText = '15';
+                timerDiv.classList.remove('timer-warning');
+            }
+
+            // Render the question
+            renderStudentQuestion(question);
+            startTimer(expiry);
+
+            // Attach answer listeners
+            attachAnswerListener(question, async (answer) => {
+                if (canAnswer && !hasAnsweredCurrent) {
+                    hasAnsweredCurrent = true;
+                    canAnswer = false;
+                    await submitAnswer(answer, question, qIdx, expiry);
+                }
+            });
         });
-    } else if (question.type === 'true_false') {
-        document.querySelectorAll('.tf-option').forEach(opt => {
-            opt.onclick = () => handler(opt.dataset.answer === 'true');
+
+        // Listen to score updates
+        unsubScore = gameRef.collection('players').doc(myStudentId).onSnapshot((doc) => {
+            if (doc.exists) {
+                document.getElementById('scoreDisplay').innerText = doc.data()?.score || 0;
+            }
         });
-    } else {
-        const btn = document.getElementById('submitAnswerBtn');
-        if (btn) {
-            btn.onclick = () => {
-                const input = document.getElementById(question.type === 'fill_blank' ? 'fillAnswer' : 'numericAnswer');
-                const value = question.type === 'numeric' ? parseFloat(input.value) : input.value;
-                if (value || value === 0) handler(value);
-                else alert('Please enter an answer');
-            };
-        }
+
+        showToast(`Joined game ${pin}!`, 'success');
+
+    } catch (err) {
+        errorEl.classList.remove('hidden');
+        errorEl.innerHTML = 'Failed to join: ' + err.message;
+        console.error(err);
+    } finally {
+        setLoading(false);
     }
 }
 
-async function submitStudentAnswer(gameRef, answer, question, qIndex, expiresAt) {
-    try {
-        const existing = await gameRef.collection('players').doc(playerId).collection('answers').doc(`q${qIndex}`).get();
-        if (existing.exists) return;
-        
-        const isCorrect = validateAnswer(question, answer);
-        const timeLeft = Math.max(0, (expiresAt.getTime() - Date.now()) / 1000);
-        const points = calculatePoints(question, timeLeft, isCorrect);
-        
-        const feedback = document.getElementById('answerFeedback');
-        if (isCorrect) {
-            feedback.innerHTML = `<div style="background:#c6f6d5; padding:15px; border-radius:12px;">✅ CORRECT! +${points} points!</div>`;
+function renderStudentQuestion(q) {
+    const qd = document.getElementById('questionDisplay');
+    const fb = document.getElementById('feedback');
+    const timerDiv = document.getElementById('timer');
+
+    if (fb) fb.innerHTML = '';
+    if (timerDiv) {
+        timerDiv.innerText = '15';
+        timerDiv.classList.remove('timer-warning');
+    }
+
+    if (!qd) return;
+
+    if (q.type === 'mc') {
+        qd.innerHTML = `
+            <h2 style="margin-bottom: 20px;">${escapeHtml(q.text)}</h2>
+            <div class="options">
+                ${q.options.map((opt, i) => `<div class="option" data-ans="${i}">${String.fromCharCode(65+i)}. ${escapeHtml(opt)}</div>`).join('')}
+            </div>
+        `;
+    } else if (q.type === 'tf') {
+        qd.innerHTML = `
+            <h2 style="margin-bottom: 20px;">${escapeHtml(q.text)}</h2>
+            <div class="tf-group">
+                <div class="tf-opt true" data-ans="true">✅ TRUE</div>
+                <div class="tf-opt false" data-ans="false">❌ FALSE</div>
+            </div>
+        `;
+    } else if (q.type === 'fb') {
+        qd.innerHTML = `
+            <h2 style="margin-bottom: 20px;">${escapeHtml(q.text)}</h2>
+            <input type="text" id="fbInput" class="blank-input" placeholder="Type your answer and press Enter...">
+            <div class="field-note">Press Enter when your answer is ready.</div>
+        `;
+    } else if (q.type === 'num') {
+        qd.innerHTML = `
+            <h2 style="margin-bottom: 20px;">${escapeHtml(q.text)}</h2>
+            <input type="number" id="numInput" class="blank-input" placeholder="Enter your answer and press Enter...">
+            <div class="field-note">Press Enter when your answer is ready.</div>
+        `;
+    }
+}
+
+function attachAnswerListener(q, handler) {
+    setTimeout(() => {
+        if (q.type === 'mc') {
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.onclick = () => handler(parseInt(opt.dataset.ans));
+            });
+        } else if (q.type === 'tf') {
+            document.querySelectorAll('.tf-opt').forEach(opt => {
+                opt.onclick = () => handler(opt.dataset.ans === 'true');
+            });
         } else {
-            feedback.innerHTML = `<div style="background:#fed7d7; padding:15px; border-radius:12px;">❌ Wrong! Answer: ${getCorrectAnswerText(question)}</div>`;
+            const input = document.getElementById(q.type === 'fb' ? 'fbInput' : 'numInput');
+            if (input) {
+                input.onkeydown = (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        let val = input.value;
+                        if (q.type === 'num') val = parseFloat(val);
+                        if (val || val === 0) handler(val);
+                        else showToast('Please enter an answer', 'error');
+                    }
+                };
+            }
         }
-        
-        await gameRef.collection('players').doc(playerId).collection('answers').doc(`q${qIndex}`).set({
+    }, 100);
+}
+
+function startTimer(expiry) {
+    if (window.timerInt) clearInterval(window.timerInt);
+    const timerDiv = document.getElementById('timer');
+    if (timerDiv) timerDiv.classList.remove('timer-warning');
+
+    window.timerInt = setInterval(() => {
+        const remaining = Math.max(0, Math.floor((expiry.getTime() - Date.now()) / 1000));
+        if (timerDiv) timerDiv.innerText = remaining;
+
+        if (remaining <= 5) timerDiv.classList.add('timer-warning');
+        else if (timerDiv) timerDiv.classList.remove('timer-warning');
+
+        if (remaining <= 0) {
+            clearInterval(window.timerInt);
+            if (timerDiv) timerDiv.innerText = '0';
+            if (!hasAnsweredCurrent) {
+                canAnswer = false;
+                hasAnsweredCurrent = true;
+                const fb = document.getElementById('feedback');
+                if (fb) fb.innerHTML = `<div class="feedback-wrong">⏰ Time's up! Your answer was not recorded.</div>`;
+            }
+        }
+    }, 200);
+}
+
+async function submitAnswer(answer, q, qIdx, expiry) {
+    const isCorrect = validateAnswer(q, answer);
+    const timeLeft = Math.max(0, (expiry.getTime() - Date.now()) / 1000);
+    const points = calcPoints(q, timeLeft, isCorrect);
+
+    const feedback = document.getElementById('feedback');
+    if (isCorrect) {
+        feedback.innerHTML = `<div class="feedback-correct">✅ CORRECT! +${points} points!</div>`;
+    } else {
+        feedback.innerHTML = `<div class="feedback-wrong">❌ Wrong! The correct answer was: <strong>${getCorrectAnswerText(q)}</strong></div>`;
+    }
+
+    try {
+        // Save answer
+        await currentGameRef.collection('players').doc(myStudentId).collection('answers').doc(`q${qIdx}`).set({
             answer: answer,
             correct: isCorrect,
             points: points,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-        
-        const playerDoc = await gameRef.collection('players').doc(playerId).get();
+
+        // Update score
+        const playerDoc = await currentGameRef.collection('players').doc(myStudentId).get();
         const newScore = (playerDoc.data()?.score || 0) + points;
-        await gameRef.collection('players').doc(playerId).update({ score: newScore });
-        
-        // Disable inputs
-        document.querySelectorAll('.option, .tf-option, #submitAnswerBtn').forEach(el => {
-            if (el.tagName === 'BUTTON') el.disabled = true;
-            else el.style.pointerEvents = 'none';
+        await currentGameRef.collection('players').doc(myStudentId).update({ score: newScore });
+
+        // Visual feedback - highlight correct/ wrong answers
+        document.querySelectorAll('.option, .tf-opt').forEach(el => {
+            el.style.pointerEvents = 'none';
+            const ans = q.type === 'mc' ? parseInt(el.dataset.ans) : el.dataset.ans === 'true';
+            if (ans === q.correct) el.classList.add('correct');
+            else if ((q.type === 'mc' && ans === answer) || (q.type === 'tf' && ans === answer)) {
+                if (!isCorrect) el.classList.add('wrong');
+            }
         });
-        
-    } catch (error) {
-        console.error(error);
-        document.getElementById('answerFeedback').innerHTML = '<p style="color:#f56565;">Failed to submit</p>';
+
+        const btn = document.getElementById('submitAnsBtn');
+        if (btn) btn.disabled = true;
+
+    } catch (err) {
+        console.error('Submit error:', err);
+        showToast('Failed to submit answer', 'error');
+        canAnswer = true;
         hasAnsweredCurrent = false;
     }
 }
 
-function startStudentTimer(expiresAt) {
-    if (window.timerInterval) clearInterval(window.timerInterval);
-    
-    window.timerInterval = setInterval(() => {
-        const remaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
-        const timer = document.getElementById('timerCircle');
-        timer.innerText = remaining;
-        
-        if (remaining <= 5) timer.classList.add('timer-warning');
-        else timer.classList.remove('timer-warning');
-        
-        if (remaining <= 0) clearInterval(window.timerInterval);
-    }, 200);
+function validateAnswer(q, a) {
+    if (q.type === 'mc') return a === q.correct;
+    if (q.type === 'tf') return String(a) === String(q.correct);
+    if (q.type === 'fb') return String(a).toLowerCase().trim() === String(q.correct).toLowerCase();
+    if (q.type === 'num') return Math.abs(parseFloat(a) - q.correct) <= 0.01;
+    return false;
 }
 
-async function showStudentResults(gameRef) {
-    const playersSnap = await gameRef.collection('players').orderBy('score', 'desc').get();
-    const players = [];
-    let rank = 0;
-    let myScore = 0;
-    
-    playersSnap.forEach((doc, i) => {
-        const data = doc.data();
-        players.push({ name: data.name, score: data.score || 0 });
-        if (doc.id === playerId) {
-            rank = i + 1;
-            myScore = data.score || 0;
-        }
-    });
-    
-    const gameDoc = await gameRef.get();
-    const total = gameDoc.data()?.questions.length || 0;
-    const maxScore = total * 100;
-    
-    const resultsHtml = `
-        <div class="card text-center">
-            <div style="font-size:50px;">🏆</div>
-            <h2>Game Over!</h2>
-            <h3>Your Score: ${myScore} / ${maxScore}</h3>
-            <h3>Position: #${rank} of ${players.length}</h3>
-            <hr>
-            <h3>Final Leaderboard</h3>
-            <div class="leaderboard">
-                ${players.map((p, i) => `
-                    <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}" style="${i+1 === rank ? 'background:#c6f6d5; font-weight:bold;' : ''}">
-                        <span>${i === 0 ? '👑' : `${i+1}.`} ${escapeHtml(p.name)}</span>
-                        <span>⭐ ${p.score}</span>
-                    </div>
-                `).join('')}
+function calcPoints(q, timeLeft, correct) {
+    if (!correct) return 0;
+    const bonus = Math.floor((timeLeft / 15) * 50);
+    const mult = { easy: 1, medium: 1.5, hard: 2 };
+    return Math.floor((q.points + bonus) * (mult[q.difficulty] || 1));
+}
+
+async function showResults() {
+    if (!currentGameRef || !myStudentId) return;
+    setLoading(true, 'Loading results...');
+
+    try {
+        const playersSnap = await currentGameRef.collection('players').orderBy('score', 'desc').get();
+        const players = [];
+        let rank = 0, myScore = 0;
+
+        playersSnap.forEach((doc, i) => {
+            const d = doc.data();
+            players.push({ name: d.name, score: d.score || 0 });
+            if (doc.id === myStudentId) {
+                rank = i + 1;
+                myScore = d.score || 0;
+            }
+        });
+
+        const gameDoc = await currentGameRef.get();
+        const total = gameDoc.data()?.questions.length || 0;
+        const maxScore = total * 100;
+
+        const resultsArea = document.getElementById('resultsArea');
+        resultsArea.innerHTML = `
+            <div class="card glass text-center" style="padding: 40px;">
+                <div style="font-size: 60px; margin-bottom: 10px;">🏆</div>
+                <h2 style="font-size: 2rem; margin-bottom: 5px;">Game Over!</h2>
+                <div style="margin: 20px 0;">
+                    <h3 style="color: var(--text-secondary);">Your Score</h3>
+                    <div style="font-size: 3rem; font-weight: 800; background: linear-gradient(135deg, #ffd89b, #c7e9fb); -webkit-background-clip: text; background-clip: text; color: transparent;">${myScore}</div>
+                    <div style="color: var(--text-secondary);">out of ${maxScore} possible</div>
+                </div>
+                <div style="margin: 20px 0;">
+                    <h3 style="color: var(--text-secondary);">Your Position</h3>
+                    <div style="font-size: 2rem; font-weight: 700; color: ${rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#fff'};">#${rank} of ${players.length}</div>
+                </div>
+                <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 24px 0;">
+                <h3 style="margin-bottom: 16px;">🏆 Final Leaderboard</h3>
+                <div style="max-height: 300px; overflow-y: auto;">
+                    ${players.map((p, i) => `
+                        <div class="leaderboard-entry ${i === 0 ? 'top1' : ''}" 
+                             style="${i+1 === rank ? 'background: rgba(17, 153, 142, 0.15); border: 1px solid rgba(17, 153, 142, 0.3); font-weight: 700;' : ''}">
+                            <span>${i === 0 ? '👑' : i+1}. ${escapeHtml(p.name)} ${i+1 === rank ? '(You)' : ''}</span>
+                            <span>⭐ ${p.score}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <button id="playAgainBtn" class="btn btn-primary mt-20" style="margin-top: 24px; padding: 16px 40px;">🔄 Play Again</button>
             </div>
-            <button id="playAgainBtn" class="btn btn-primary mt-20">Play Again</button>
-        </div>
-    `;
-    
-    document.getElementById('studentQuizArea').classList.add('hidden');
-    document.getElementById('studentResultsArea').classList.remove('hidden');
-    document.getElementById('studentResultsArea').innerHTML = resultsHtml;
-    
-    document.getElementById('playAgainBtn')?.addEventListener('click', () => location.reload());
+        `;
+
+        hide('quizArea');
+        show('resultsArea');
+        document.getElementById('playAgainBtn').onclick = () => location.reload();
+
+    } catch (err) {
+        console.error('Results error:', err);
+        showToast('Failed to load results', 'error');
+    } finally {
+        setLoading(false);
+    }
 }
