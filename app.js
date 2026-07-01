@@ -1,8 +1,5 @@
 // ==================== APP.JS - MAIN ENTRY POINT ====================
 
-// All global variables from config.js are available
-// All functions from other modules are available
-
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 SmartQuiz Live v2.0 starting...');
 
@@ -29,14 +26,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('endControl').onclick = endGame;
 
     // Student
-    document.getElementById('joinGameControl').onclick = joinGame;
+    document.getElementById('joinGameControl').onclick = function() {
+        setLoading(true, 'Joining game...');
+        joinGame();
+    };
 
     // Enter key support
     document.getElementById('studentName').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinGame();
+        if (e.key === 'Enter') {
+            setLoading(true, 'Joining game...');
+            joinGame();
+        }
     });
     document.getElementById('gamePinStudent').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinGame();
+        if (e.key === 'Enter') {
+            setLoading(true, 'Joining game...');
+            joinGame();
+        }
     });
 
     // Render initial form

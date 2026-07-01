@@ -1,4 +1,8 @@
-// ==================== GAME HOST MODULE ====================
+// ==================== GAME HOST MODULE - COMPLETE FIXED ====================
+
+let currentQuestionIndex = -1;
+let totalQuestionsCount = 0;
+let questionTimerInterval = null;
 
 async function createGame() {
     if (!myQuestions.length) { showToast('Add questions first!', 'error'); return; }
@@ -21,12 +25,11 @@ async function createGame() {
             questions: myQuestions,
             hostId: user.user.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            waitingForNext: false
+            waitingForNext: true
         });
 
         currentGameRef = gameRef;
         isGameHost = true;
-        saveSession(pin, true);
 
         hide('hostPanel');
         show('gameDashboard');
@@ -43,6 +46,8 @@ async function createGame() {
             const currentQDiv = document.getElementById('currentQDisplay');
             const statusDiv = document.getElementById('statusMsg');
 
+            console.log('Game status update:', data.status, 'currentIndex:', data.currentIndex, 'waitingForNext:', data.waitingForNext);
+
             if (data.status === 'active') {
                 if (startBtn) { startBtn.disabled = true; startBtn.textContent = '✓ ACTIVE'; }
                 if (endBtn) endBtn.disabled = false;
@@ -50,12 +55,13 @@ async function createGame() {
                 const idx = data.currentIndex;
                 const total = data.questions.length;
 
-                // Enable NEXT when waitingForNext is true OR when game just started (idx === -1)
-                const canGoNext = data.waitingForNext || idx === -1;
-                const hasMoreQuestions = idx + 1 < total;
-
+                // Enable NEXT when waitingForNext is true OR when idx is -1 (first question)
                 if (nextBtn) {
-                    nextBtn.disabled = !(canGoNext && hasMoreQuestions);
+                    if (idx === -1 || data.waitingForNext) {
+                        nextBtn.disabled = false;
+                    } else {
+                        nextBtn.disabled = true;
+                    }
                 }
 
                 if (idx >= 0 && idx < total) {
@@ -80,7 +86,6 @@ async function createGame() {
                 } else {
                     if (currentQDiv) currentQDiv.innerHTML = '<span style="color: var(--text-secondary);">Ready to start. Click NEXT QUESTION to begin.</span>';
                     if (statusDiv) statusDiv.innerHTML = '🚀 Game active! Click NEXT QUESTION to begin.';
-                    if (nextBtn) nextBtn.disabled = false;
                 }
             } else if (data.status === 'waiting') {
                 if (startBtn) { startBtn.disabled = false; startBtn.textContent = '▶ START'; }
@@ -144,8 +149,13 @@ async function startGame() {
     if (!currentGameRef) return;
     setLoading(true, 'Starting game...');
     try {
-        await currentGameRef.update({ status: 'active', currentIndex: -1, waitingForNext: false });
+        await currentGameRef.update({ 
+            status: 'active', 
+            currentIndex: -1, 
+            waitingForNext: true 
+        });
         showToast('Game started!', 'success');
+        document.getElementById('nextControl').disabled = false;
     } catch (err) {
         showToast('Failed to start: ' + err.message, 'error');
     } finally {
@@ -167,8 +177,7 @@ async function nextQuestion() {
             return;
         }
 
-        const currentIndex = typeof data.currentIndex === 'number' ? data.currentIndex : -1;
-        const nextIdx = currentIndex + 1;
+        let nextIdx = (data.currentIndex || -1) + 1;
 
         if (nextIdx >= data.questions.length) {
             await currentGameRef.update({ status: 'ended' });
@@ -178,9 +187,12 @@ async function nextQuestion() {
         }
 
         // Clear previous timer
-        if (currentQuestionTimeout) clearTimeout(currentQuestionTimeout);
+        if (questionTimerInterval) {
+            clearTimeout(questionTimerInterval);
+            questionTimerInterval = null;
+        }
 
-        // Update game with new question index
+        // Update game with new question index - SET waitingForNext to FALSE
         await currentGameRef.update({
             currentIndex: nextIdx,
             waitingForNext: false
@@ -207,7 +219,7 @@ async function nextQuestion() {
         if (statusDiv) statusDiv.innerHTML = `📢 Question ${nextIdx+1}/${total} is LIVE! Waiting for answers...`;
 
         // Auto-enable NEXT after 15 seconds
-        currentQuestionTimeout = setTimeout(async () => {
+        questionTimerInterval = setTimeout(async () => {
             try {
                 const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
                 if (activeDoc.exists && activeDoc.data()?.isActive) {
@@ -240,7 +252,10 @@ async function endGame() {
     if (!confirm('End the game? Students will see final results.')) return;
 
     setLoading(true, 'Ending game...');
-    if (currentQuestionTimeout) clearTimeout(currentQuestionTimeout);
+    if (questionTimerInterval) {
+        clearTimeout(questionTimerInterval);
+        questionTimerInterval = null;
+    }
 
     try {
         await currentGameRef.update({ status: 'ended' });

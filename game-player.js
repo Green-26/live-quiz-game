@@ -1,8 +1,9 @@
-// ==================== GAME PLAYER MODULE ====================
+// ==================== GAME PLAYER MODULE - COMPLETE FIXED ====================
 
 let myStudentId = null;
 let canAnswer = true;
 let hasAnsweredCurrent = false;
+let studentTimerInterval = null;
 
 async function joinGame() {
     const name = document.getElementById('studentName').value.trim();
@@ -49,7 +50,6 @@ async function joinGame() {
         myStudentId = user.user.uid;
         currentGameRef = gameRef;
         currentPin = pin;
-        saveSession(pin, false);
 
         await gameRef.collection('players').doc(myStudentId).set({
             name: name,
@@ -67,6 +67,7 @@ async function joinGame() {
         unsubGame = gameRef.onSnapshot((doc) => {
             if (!doc.exists) return;
             const data = doc.data();
+            console.log('Game status update:', data.status);
 
             if (data.status === 'waiting') {
                 hide('quizArea');
@@ -83,20 +84,23 @@ async function joinGame() {
             }
         });
 
-        // FIXED: Listen to active question
+        // FIXED: Listen to active question - THIS IS THE KEY
         unsubQuestion = gameRef.collection('activeQuestion').doc('current').onSnapshot((snap) => {
-            console.log('📢 Student received question update:', snap.exists, snap.data()?.isActive);
-
+            console.log('📢 Question snapshot received:', snap.exists);
+            
             const qd = document.getElementById('questionDisplay');
             const fb = document.getElementById('feedback');
             const timerDiv = document.getElementById('timer');
 
             if (!snap.exists) {
                 if (qd) qd.innerHTML = '<div class="text-center" style="color: var(--text-secondary); padding: 40px;">⏳ Waiting for question...</div>';
+                if (timerDiv) timerDiv.innerText = '15';
+                if (fb) fb.innerHTML = '';
                 return;
             }
 
             const questionData = snap.data();
+            console.log('Question data:', questionData);
 
             // If question is not active, show waiting message
             if (!questionData.isActive) {
@@ -114,7 +118,7 @@ async function joinGame() {
             const expiry = questionData.expiresAt.toDate();
             const qIdx = questionData.index;
 
-            console.log('📢 Rendering question:', question.text, 'index:', qIdx);
+            console.log('📢 Rendering question:', question.text);
 
             // Clear previous feedback and reset timer
             if (fb) fb.innerHTML = '';
@@ -125,10 +129,13 @@ async function joinGame() {
 
             // Render the question
             renderStudentQuestion(question);
-            startTimer(expiry);
+            
+            // Start the timer
+            startStudentTimer(expiry);
 
-            // Attach answer listeners
+            // Attach answer listeners - AUTO SUBMIT ON CLICK
             attachAnswerListener(question, async (answer) => {
+                console.log('Answer clicked:', answer);
                 if (canAnswer && !hasAnsweredCurrent) {
                     hasAnsweredCurrent = true;
                     canAnswer = false;
@@ -145,12 +152,12 @@ async function joinGame() {
         });
 
         showToast(`Joined game ${pin}!`, 'success');
+        setLoading(false);
 
     } catch (err) {
         errorEl.classList.remove('hidden');
         errorEl.innerHTML = 'Failed to join: ' + err.message;
         console.error(err);
-    } finally {
         setLoading(false);
     }
 }
@@ -186,66 +193,91 @@ function renderStudentQuestion(q) {
     } else if (q.type === 'fb') {
         qd.innerHTML = `
             <h2 style="margin-bottom: 20px;">${escapeHtml(q.text)}</h2>
-            <input type="text" id="fbInput" class="blank-input" placeholder="Type your answer and press Enter...">
-            <div class="field-note">Press Enter when your answer is ready.</div>
+            <div class="options">
+                <input type="text" id="fbInput" class="blank-input" placeholder="Type your answer..." style="margin-bottom: 15px;">
+                <button id="submitAnsBtn" class="btn btn-primary btn-block">Submit Answer</button>
+            </div>
         `;
     } else if (q.type === 'num') {
         qd.innerHTML = `
             <h2 style="margin-bottom: 20px;">${escapeHtml(q.text)}</h2>
-            <input type="number" id="numInput" class="blank-input" placeholder="Enter your answer and press Enter...">
-            <div class="field-note">Press Enter when your answer is ready.</div>
+            <div class="options">
+                <input type="number" id="numInput" class="blank-input" placeholder="Enter your answer..." style="margin-bottom: 15px;">
+                <button id="submitAnsBtn" class="btn btn-primary btn-block">Submit Answer</button>
+            </div>
         `;
     }
 }
 
 function attachAnswerListener(q, handler) {
     setTimeout(() => {
+        // For Multiple Choice - auto submit on click
         if (q.type === 'mc') {
             document.querySelectorAll('.option').forEach(opt => {
-                opt.onclick = () => handler(parseInt(opt.dataset.ans));
+                opt.onclick = function() {
+                    const answer = parseInt(this.dataset.ans);
+                    console.log('MC Answer clicked:', answer);
+                    handler(answer);
+                };
             });
-        } else if (q.type === 'tf') {
+        } 
+        // For True/False - auto submit on click
+        else if (q.type === 'tf') {
             document.querySelectorAll('.tf-opt').forEach(opt => {
-                opt.onclick = () => handler(opt.dataset.ans === 'true');
+                opt.onclick = function() {
+                    const answer = this.dataset.ans === 'true';
+                    console.log('TF Answer clicked:', answer);
+                    handler(answer);
+                };
             });
-        } else {
-            const input = document.getElementById(q.type === 'fb' ? 'fbInput' : 'numInput');
-            if (input) {
-                input.onkeydown = (event) => {
-                    if (event.key === 'Enter') {
-                        event.preventDefault();
-                        let val = input.value;
-                        if (q.type === 'num') val = parseFloat(val);
-                        if (val || val === 0) handler(val);
-                        else showToast('Please enter an answer', 'error');
+        } 
+        // For Fill Blank and Numeric - submit button
+        else {
+            const btn = document.getElementById('submitAnsBtn');
+            if (btn) {
+                btn.onclick = () => {
+                    const input = document.getElementById(q.type === 'fb' ? 'fbInput' : 'numInput');
+                    if (!input) return;
+                    let val = input.value;
+                    if (q.type === 'num') val = parseFloat(val);
+                    if (val || val === 0) {
+                        console.log('Text answer submitted:', val);
+                        handler(val);
+                    } else {
+                        showToast('Please enter an answer', 'error');
                     }
                 };
             }
         }
-    }, 100);
+    }, 150);
 }
 
-function startTimer(expiry) {
-    if (window.timerInt) clearInterval(window.timerInt);
+function startStudentTimer(expiry) {
+    if (studentTimerInterval) {
+        clearInterval(studentTimerInterval);
+        studentTimerInterval = null;
+    }
+    
     const timerDiv = document.getElementById('timer');
     if (timerDiv) timerDiv.classList.remove('timer-warning');
 
-    window.timerInt = setInterval(() => {
-        const remaining = Math.max(0, Math.floor((expiry.getTime() - Date.now()) / 1000));
-        if (timerDiv) timerDiv.innerText = remaining;
-
-        if (remaining <= 5) timerDiv.classList.add('timer-warning');
-        else if (timerDiv) timerDiv.classList.remove('timer-warning');
+    studentTimerInterval = setInterval(() => {
+        const now = Date.now();
+        const remaining = Math.max(0, Math.floor((expiry.getTime() - now) / 1000));
+        
+        if (timerDiv) {
+            timerDiv.innerText = remaining;
+            if (remaining <= 5) {
+                timerDiv.classList.add('timer-warning');
+            } else {
+                timerDiv.classList.remove('timer-warning');
+            }
+        }
 
         if (remaining <= 0) {
-            clearInterval(window.timerInt);
+            clearInterval(studentTimerInterval);
+            studentTimerInterval = null;
             if (timerDiv) timerDiv.innerText = '0';
-            if (!hasAnsweredCurrent) {
-                canAnswer = false;
-                hasAnsweredCurrent = true;
-                const fb = document.getElementById('feedback');
-                if (fb) fb.innerHTML = `<div class="feedback-wrong">⏰ Time's up! Your answer was not recorded.</div>`;
-            }
         }
     }, 200);
 }
@@ -263,7 +295,7 @@ async function submitAnswer(answer, q, qIdx, expiry) {
     }
 
     try {
-        // Save answer
+        // Save answer to Firebase
         await currentGameRef.collection('players').doc(myStudentId).collection('answers').doc(`q${qIdx}`).set({
             answer: answer,
             correct: isCorrect,
@@ -271,12 +303,12 @@ async function submitAnswer(answer, q, qIdx, expiry) {
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        // Update score
+        // Update score in Firebase
         const playerDoc = await currentGameRef.collection('players').doc(myStudentId).get();
         const newScore = (playerDoc.data()?.score || 0) + points;
         await currentGameRef.collection('players').doc(myStudentId).update({ score: newScore });
 
-        // Visual feedback - highlight correct/ wrong answers
+        // Visual feedback - highlight correct/wrong answers
         document.querySelectorAll('.option, .tf-opt').forEach(el => {
             el.style.pointerEvents = 'none';
             const ans = q.type === 'mc' ? parseInt(el.dataset.ans) : el.dataset.ans === 'true';
@@ -286,8 +318,15 @@ async function submitAnswer(answer, q, qIdx, expiry) {
             }
         });
 
+        // Disable submit button if exists
         const btn = document.getElementById('submitAnsBtn');
         if (btn) btn.disabled = true;
+
+        // Disable inputs if exists
+        const fbInput = document.getElementById('fbInput');
+        if (fbInput) fbInput.disabled = true;
+        const numInput = document.getElementById('numInput');
+        if (numInput) numInput.disabled = true;
 
     } catch (err) {
         console.error('Submit error:', err);

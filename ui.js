@@ -1,4 +1,4 @@
-// ==================== UI NAVIGATION MODULE ====================
+// ==================== UI NAVIGATION MODULE - COMPLETE FIXED ====================
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
@@ -10,7 +10,7 @@ function showToast(message, type = 'info') {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(100%)';
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, 3500);
 }
 
 function setLoading(show, text = 'Loading...') {
@@ -19,8 +19,12 @@ function setLoading(show, text = 'Loading...') {
     if (show) {
         loadingText.textContent = text;
         overlay.classList.remove('hidden');
+        overlay.style.opacity = '1';
     } else {
-        overlay.classList.add('hidden');
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+        }, 300);
     }
 }
 
@@ -55,8 +59,8 @@ function cleanupListeners() {
     if (unsubPlayers) { unsubPlayers(); unsubPlayers = null; }
     if (unsubQuestion) { unsubQuestion(); unsubQuestion = null; }
     if (unsubScore) { unsubScore(); unsubScore = null; }
-    if (currentQuestionTimeout) { clearTimeout(currentQuestionTimeout); currentQuestionTimeout = null; }
-    if (window.timerInt) { clearInterval(window.timerInt); window.timerInt = null; }
+    if (questionTimerInterval) { clearTimeout(questionTimerInterval); questionTimerInterval = null; }
+    if (studentTimerInterval) { clearInterval(studentTimerInterval); studentTimerInterval = null; }
 }
 
 // Navigation functions
@@ -77,6 +81,9 @@ function showStudent() {
     document.getElementById('studentName').value = '';
     document.getElementById('gamePinStudent').value = '';
     clearError('joinError');
+    hide('waitingArea');
+    hide('quizArea');
+    hide('resultsArea');
 }
 
 function backToLanding() {
@@ -96,4 +103,5 @@ function backToLanding() {
     hide('quizArea');
     hide('resultsArea');
     show('landingPage');
+    setLoading(false);
 }
