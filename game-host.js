@@ -1,4 +1,4 @@
-// ==================== GAME HOST MODULE - ENHANCED ====================
+// ==================== GAME HOST MODULE - COMPLETE FIXED ====================
 
 let currentQuestionIndex = -1;
 let totalQuestionsCount = 0;
@@ -55,7 +55,6 @@ async function createGame() {
                 const idx = data.currentIndex;
                 const total = data.questions.length;
 
-                // Enable NEXT when waitingForNext is true OR when idx is -1 (first question)
                 if (nextBtn) {
                     if (idx === -1 || data.waitingForNext) {
                         nextBtn.disabled = false;
@@ -145,6 +144,7 @@ async function createGame() {
     }
 }
 
+// ==================== FIXED START GAME ====================
 async function startGame() {
     if (!currentGameRef) return;
     setLoading(true, '▶ Starting game...');
@@ -155,7 +155,13 @@ async function startGame() {
             waitingForNext: true 
         });
         showToast('Game started!', 'success');
-        document.getElementById('nextControl').disabled = false;
+        const nextBtn = document.getElementById('nextControl');
+        if (nextBtn) nextBtn.disabled = false;
+        const startBtn = document.getElementById('startGameControl');
+        if (startBtn) {
+            startBtn.textContent = '✓ ACTIVE';
+            startBtn.disabled = true;
+        }
     } catch (err) {
         showToast('Failed to start: ' + err.message, 'error');
     } finally {
@@ -163,10 +169,13 @@ async function startGame() {
     }
 }
 
+// ==================== FIXED NEXT QUESTION ====================
 async function nextQuestion() {
-    if (!currentGameRef) return;
+    if (!currentGameRef) {
+        showToast('No active game found', 'error');
+        return;
+    }
     
-    // Show loading with proper animation
     setLoading(true, '🔄 Sending question to students...');
 
     try {
@@ -182,54 +191,55 @@ async function nextQuestion() {
         let nextIdx = (data.currentIndex || -1) + 1;
 
         if (nextIdx >= data.questions.length) {
-            await currentGameRef.update({ status: 'ended' });
-            showToast('Quiz completed! 🎉', 'success');
+            await currentGameRef.update({ 
+                status: 'ended',
+                endedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            showToast('🎉 Quiz completed!', 'success');
             setLoading(false);
             return;
         }
 
-        // Clear previous timer
         if (questionTimerInterval) {
             clearTimeout(questionTimerInterval);
             questionTimerInterval = null;
         }
 
-        // Step 1: Update currentIndex in main game document
+        const activeRef = currentGameRef.collection('activeQuestion').doc('current');
+        const questionData = data.questions[nextIdx];
+        const startTime = new Date();
+        const expiresAt = new Date(startTime.getTime() + 15000);
+        const version = Date.now();
+
         await currentGameRef.update({
             currentIndex: nextIdx,
             waitingForNext: false,
             questionSentAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        // Step 2: Create/update activeQuestion document with sync flag for instant delivery
-        const activeRef = currentGameRef.collection('activeQuestion').doc('current');
-        const questionData = data.questions[nextIdx];
-        const startTime = new Date();
-        const expiresAt = new Date(startTime.getTime() + 15000);
-
-        // CRITICAL FIX: Use setDoc to force document creation/update with immediate sync
+        // CRITICAL FIX: Force sync with merge:false and version tracking
         await activeRef.set({
             question: questionData,
             startedAt: firebase.firestore.FieldValue.serverTimestamp(),
             expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
             isActive: true,
             index: nextIdx,
-            syncFlag: Math.random(), // Force listener update
+            syncFlag: Math.random(),
             sentToStudents: true,
-            version: Date.now() // Timestamp for sync detection
-        }, { merge: false }); // Force complete overwrite for sync
+            version: version
+        }, { merge: false });
 
         currentQuestionIndex = nextIdx;
         const total = data.questions.length;
 
-        // Disable NEXT until time's up
         const nextBtn = document.getElementById('nextControl');
         const statusDiv = document.getElementById('statusMsg');
 
         if (nextBtn) nextBtn.disabled = true;
-        if (statusDiv) statusDiv.innerHTML = `📢 Question ${nextIdx+1}/${total} is LIVE! Waiting for answers...`;
+        if (statusDiv) {
+            statusDiv.innerHTML = `📢 Question ${nextIdx+1}/${total} is LIVE! Waiting for answers...`;
+        }
 
-        // Display current question on teacher dashboard
         const currentQDiv = document.getElementById('currentQDisplay');
         if (currentQDiv) {
             currentQDiv.innerHTML = `
@@ -242,7 +252,6 @@ async function nextQuestion() {
             `;
         }
 
-        // Auto-enable NEXT after 15 seconds
         questionTimerInterval = setTimeout(async () => {
             try {
                 const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
@@ -253,7 +262,9 @@ async function nextQuestion() {
                     });
                     await currentGameRef.update({ waitingForNext: true });
 
-                    if (statusDiv) statusDiv.innerHTML = `⏰ Time's up for Question ${nextIdx+1}! Click NEXT to continue.`;
+                    if (statusDiv) {
+                        statusDiv.innerHTML = `⏰ Time's up for Question ${nextIdx+1}! Click NEXT to continue.`;
+                    }
                     if (nextBtn) {
                         const gameDoc = await currentGameRef.get();
                         const gameData = gameDoc.data();
@@ -267,31 +278,33 @@ async function nextQuestion() {
         }, 15000);
 
         showToast(`✅ Question ${nextIdx+1} sent to all students!`, 'success');
+        setLoading(false);
 
     } catch (err) {
         showToast('❌ Error: ' + err.message, 'error');
-        console.error(err);
-    } finally {
+        console.error('Sync error:', err);
         setLoading(false);
     }
 }
 
+// ==================== FIXED END GAME ====================
 async function endGame() {
     if (!currentGameRef) return;
-    if (!confirm('End the game? Students will see final results.')) return;
-
     setLoading(true, '⏹ Ending game...');
-    if (questionTimerInterval) {
-        clearTimeout(questionTimerInterval);
-        questionTimerInterval = null;
-    }
-
     try {
-        await currentGameRef.update({ status: 'ended' });
-        showToast('Game ended!', 'info');
+        await currentGameRef.update({ 
+            status: 'ended',
+            endedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showToast('Game ended successfully', 'success');
+        document.getElementById('startGameControl').disabled = true;
+        document.getElementById('nextControl').disabled = true;
+        document.getElementById('endControl').disabled = true;
     } catch (err) {
-        showToast('Error: ' + err.message, 'error');
+        showToast('Failed to end: ' + err.message, 'error');
     } finally {
         setLoading(false);
     }
 }
+
+console.log('✅ Game host module loaded with fixes');

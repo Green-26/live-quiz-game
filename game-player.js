@@ -1,10 +1,10 @@
-// ==================== GAME PLAYER MODULE - ENHANCED ====================
+// ==================== GAME PLAYER MODULE - COMPLETE FIXED ====================
 
 let myStudentId = null;
 let canAnswer = true;
 let hasAnsweredCurrent = false;
 let studentTimerInterval = null;
-let lastQuestionVersion = null; // Track version for sync detection
+let lastQuestionVersion = null;
 
 async function joinGame() {
     const name = document.getElementById('studentName').value.trim();
@@ -64,6 +64,9 @@ async function joinGame() {
         document.getElementById('pinDisplay').innerText = pin;
         document.getElementById('scoreDisplay').innerText = '0';
 
+        // Reset version tracker
+        lastQuestionVersion = null;
+
         // Listen to game status
         unsubGame = gameRef.onSnapshot((doc) => {
             if (!doc.exists) return;
@@ -85,7 +88,7 @@ async function joinGame() {
             }
         });
 
-        // CRITICAL FIX: Listen to active question with enhanced sync detection
+        // CRITICAL FIX: Enhanced question listener with version tracking
         unsubQuestion = gameRef.collection('activeQuestion').doc('current').onSnapshot((snap) => {
             console.log('📡 Question sync received:', snap.exists ? 'YES' : 'NO');
             
@@ -103,6 +106,18 @@ async function joinGame() {
 
             const questionData = snap.data();
 
+            // CRITICAL: Version check to detect new questions
+            const currentVersion = questionData.version;
+            if (currentVersion && currentVersion === lastQuestionVersion) {
+                console.log('⚠️ Same question version, ignoring duplicate sync');
+                return;
+            }
+            
+            if (currentVersion) {
+                lastQuestionVersion = currentVersion;
+                console.log('✅ New question detected! Version:', currentVersion);
+            }
+
             // Check if question is still active
             if (!questionData.isActive) {
                 if (qd) qd.innerHTML = '<div class="text-center" style="color: var(--text-secondary); padding: 40px;">⏳ Getting next question ready...</div>';
@@ -110,14 +125,6 @@ async function joinGame() {
                 if (fb) fb.innerHTML = '';
                 return;
             }
-
-            // SYNC DETECTION: Check if this is a NEW question (version changed)
-            const currentVersion = questionData.version;
-            if (currentVersion === lastQuestionVersion) {
-                console.log('⚠️ Same question version, ignoring duplicate sync');
-                return;
-            }
-            lastQuestionVersion = currentVersion;
 
             // SYNC POINT: Question received immediately
             canAnswer = true;
@@ -394,18 +401,16 @@ async function showResults() {
                         </div>
                     `).join('')}
                 </div>
-                <button id="playAgainBtn" class="btn btn-primary mt-20" style="margin-top: 24px; padding: 16px 40px;">🔄 Play Again</button>
+                <button class="btn btn-primary mt-20" onclick="backToLanding()">🏠 Back to Home</button>
             </div>
         `;
-
-        hide('quizArea');
         show('resultsArea');
-        document.getElementById('playAgainBtn').onclick = () => location.reload();
-
+        hide('quizArea');
+        setLoading(false);
     } catch (err) {
         console.error('Results error:', err);
-        showToast('Failed to load results', 'error');
-    } finally {
         setLoading(false);
     }
 }
+
+console.log('✅ Game player module loaded with fixes');

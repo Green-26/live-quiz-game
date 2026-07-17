@@ -5,6 +5,114 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>🌐 SmartQuiz Live | Neural Arena</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* ==================== LOADING ANIMATION FIXES ==================== */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 16, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.4s ease;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(102, 126, 234, 0.15);
+            border-top-color: #667eea;
+            border-right-color: #764ba2;
+            border-radius: 50%;
+            animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            margin-bottom: 20px;
+            box-shadow: 0 0 30px rgba(102, 126, 234, 0.2);
+        }
+
+        .loading-text {
+            color: #94a3b8;
+            font-weight: 500;
+            font-size: 1.1rem;
+            animation: loading-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes loading-pulse {
+            0%, 100% { opacity: 0.7; transform: translateY(0); }
+            50% { opacity: 1; transform: translateY(-2px); }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .btn.loading {
+            position: relative;
+            color: transparent !important;
+            pointer-events: none;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        .toast-container .toast {
+            animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Connection status animation */
+        .connecting-dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+        }
+
+        /* Toast container fix */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+    </style>
 </head>
 <body>
     <canvas id="networkCanvas"></canvas>
@@ -165,6 +273,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     
+    <!-- Your original files -->
     <script src="config.js"></script>
     <script src="questions.js"></script>
     <script src="realtime-sync.js"></script>
@@ -174,5 +283,492 @@
     <script src="ui.js"></script>
     <script src="background.js"></script>
     <script src="app.js"></script>
+    
+    <!-- FIXES: Override with fixed versions (load LAST) -->
+    <script>
+    // ==================== COMPLETE FIX - PASTE THIS ENTIRE BLOCK ====================
+    // This replaces the broken functions with working ones
+    
+    (function() {
+        console.log('🔧 Applying fixes...');
+        
+        // Store original functions
+        const originalNext = window.nextQuestion;
+        const originalJoin = window.joinGame;
+        const originalStart = window.startGame;
+        const originalEnd = window.endGame;
+        
+        // ==================== FIXED NEXT QUESTION ====================
+        window.nextQuestion = async function() {
+            if (!currentGameRef) {
+                showToast('No active game found', 'error');
+                return;
+            }
+            
+            setLoading(true, '🔄 Sending question to students...');
+
+            try {
+                const doc = await currentGameRef.get();
+                const data = doc.data();
+
+                if (data.status !== 'active') {
+                    showToast('Game is not active. Click START first.', 'error');
+                    setLoading(false);
+                    return;
+                }
+
+                let nextIdx = (data.currentIndex || -1) + 1;
+
+                if (nextIdx >= data.questions.length) {
+                    await currentGameRef.update({ 
+                        status: 'ended',
+                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    showToast('🎉 Quiz completed!', 'success');
+                    setLoading(false);
+                    return;
+                }
+
+                if (questionTimerInterval) {
+                    clearTimeout(questionTimerInterval);
+                    questionTimerInterval = null;
+                }
+
+                const activeRef = currentGameRef.collection('activeQuestion').doc('current');
+                const questionData = data.questions[nextIdx];
+                const startTime = new Date();
+                const expiresAt = new Date(startTime.getTime() + 15000);
+                const version = Date.now();
+
+                await currentGameRef.update({
+                    currentIndex: nextIdx,
+                    waitingForNext: false,
+                    questionSentAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // CRITICAL: Force sync with merge:false
+                await activeRef.set({
+                    question: questionData,
+                    startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
+                    isActive: true,
+                    index: nextIdx,
+                    syncFlag: Math.random(),
+                    sentToStudents: true,
+                    version: version
+                }, { merge: false });
+
+                currentQuestionIndex = nextIdx;
+                const total = data.questions.length;
+
+                const nextBtn = document.getElementById('nextControl');
+                const statusDiv = document.getElementById('statusMsg');
+
+                if (nextBtn) nextBtn.disabled = true;
+                if (statusDiv) {
+                    statusDiv.innerHTML = `📢 Question ${nextIdx+1}/${total} is LIVE! Waiting for answers...`;
+                }
+
+                const currentQDiv = document.getElementById('currentQDisplay');
+                if (currentQDiv) {
+                    currentQDiv.innerHTML = `
+                        <div style="margin-bottom: 8px;"><strong style="color: #ffd89b;">Question ${nextIdx+1}/${total}</strong></div>
+                        <div style="font-size: 1.1rem; margin-bottom: 8px;">${escapeHtml(questionData.text)}</div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem;">
+                            <span style="background: rgba(102,126,234,0.2); padding: 2px 10px; border-radius: 12px; border: 1px solid rgba(102,126,234,0.3);">${questionData.type.toUpperCase()}</span>
+                            <span style="margin-left: 10px;">🎯 ${questionData.points} pts | ${questionData.difficulty}</span>
+                        </div>
+                    `;
+                }
+
+                questionTimerInterval = setTimeout(async () => {
+                    try {
+                        const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
+                        if (activeDoc.exists && activeDoc.data()?.isActive) {
+                            await activeRef.update({ 
+                                isActive: false,
+                                stoppedAt: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+                            await currentGameRef.update({ waitingForNext: true });
+
+                            if (statusDiv) {
+                                statusDiv.innerHTML = `⏰ Time's up for Question ${nextIdx+1}! Click NEXT to continue.`;
+                            }
+                            if (nextBtn) {
+                                const gameDoc = await currentGameRef.get();
+                                const gameData = gameDoc.data();
+                                const hasMore = nextIdx + 1 < gameData.questions.length;
+                                nextBtn.disabled = !hasMore;
+                            }
+                        }
+                    } catch (e) { 
+                        console.error('Timer error:', e); 
+                    }
+                }, 15000);
+
+                showToast(`✅ Question ${nextIdx+1} sent to all students!`, 'success');
+                setLoading(false);
+
+            } catch (err) {
+                showToast('❌ Error: ' + err.message, 'error');
+                console.error('Sync error:', err);
+                setLoading(false);
+            }
+        };
+
+        // ==================== FIXED JOIN GAME ====================
+        window.joinGame = async function() {
+            const name = document.getElementById('studentName').value.trim();
+            const pin = document.getElementById('gamePinStudent').value.trim();
+
+            const errorEl = document.getElementById('joinError');
+            errorEl.classList.add('hidden');
+            errorEl.innerHTML = '';
+
+            if (!name || !pin) {
+                errorEl.classList.remove('hidden');
+                errorEl.innerHTML = 'Please enter your name and game PIN';
+                return;
+            }
+
+            if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+                errorEl.classList.remove('hidden');
+                errorEl.innerHTML = 'PIN must be exactly 6 digits';
+                return;
+            }
+
+            setLoading(true, '🔗 Connecting to game...');
+
+            try {
+                const gameRef = db.collection('games').doc(pin);
+                const gameDoc = await gameRef.get();
+
+                if (!gameDoc.exists) {
+                    errorEl.classList.remove('hidden');
+                    errorEl.innerHTML = 'Game not found! Check the PIN and try again.';
+                    setLoading(false);
+                    return;
+                }
+
+                const gameData = gameDoc.data();
+                if (gameData.status === 'ended') {
+                    errorEl.classList.remove('hidden');
+                    errorEl.innerHTML = 'This game has already ended.';
+                    setLoading(false);
+                    return;
+                }
+
+                const user = await auth.signInAnonymously();
+                myStudentId = user.user.uid;
+                currentGameRef = gameRef;
+                currentPin = pin;
+
+                await gameRef.collection('players').doc(myStudentId).set({
+                    name: name,
+                    score: 0,
+                    joinedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                hide('studentPanel');
+                show('waitingArea');
+                document.getElementById('studentNameDisplay').innerText = name;
+                document.getElementById('pinDisplay').innerText = pin;
+                document.getElementById('scoreDisplay').innerText = '0';
+
+                let lastVersion = null;
+
+                unsubGame = gameRef.onSnapshot((doc) => {
+                    if (!doc.exists) return;
+                    const data = doc.data();
+
+                    if (data.status === 'waiting') {
+                        hide('quizArea');
+                        show('waitingArea');
+                        hide('resultsArea');
+                    } else if (data.status === 'active') {
+                        hide('waitingArea');
+                        show('quizArea');
+                        hide('resultsArea');
+                    } else if (data.status === 'ended') {
+                        hide('quizArea');
+                        hide('waitingArea');
+                        showResults();
+                    }
+                });
+
+                // CRITICAL: Fixed question listener with version tracking
+                unsubQuestion = gameRef.collection('activeQuestion').doc('current').onSnapshot((snap) => {
+                    console.log('📡 Question sync received:', snap.exists ? 'YES' : 'NO');
+                    
+                    const qd = document.getElementById('questionDisplay');
+                    const fb = document.getElementById('feedback');
+                    const timerDiv = document.getElementById('timer');
+
+                    if (!snap.exists) {
+                        if (qd) qd.innerHTML = '<div class="text-center" style="color: var(--text-secondary); padding: 40px;">⏳ Waiting for question...</div>';
+                        if (timerDiv) timerDiv.innerText = '15';
+                        if (fb) fb.innerHTML = '';
+                        lastVersion = null;
+                        return;
+                    }
+
+                    const questionData = snap.data();
+
+                    // CRITICAL: Version check to detect new questions
+                    const currentVersion = questionData.version;
+                    if (currentVersion && currentVersion === lastVersion) {
+                        console.log('⚠️ Same question version, ignoring duplicate sync');
+                        return;
+                    }
+                    
+                    if (currentVersion) {
+                        lastVersion = currentVersion;
+                    }
+
+                    if (!questionData.isActive) {
+                        if (qd) qd.innerHTML = '<div class="text-center" style="color: var(--text-secondary); padding: 40px;">⏳ Getting next question ready...</div>';
+                        if (timerDiv) timerDiv.innerText = '15';
+                        if (fb) fb.innerHTML = '';
+                        return;
+                    }
+
+                    canAnswer = true;
+                    hasAnsweredCurrent = false;
+
+                    const question = questionData.question;
+                    const expiry = questionData.expiresAt.toDate();
+                    const qIdx = questionData.index;
+
+                    console.log('✅ Rendering question for student:', question.text);
+
+                    if (fb) fb.innerHTML = '';
+                    if (timerDiv) {
+                        timerDiv.innerText = '15';
+                        timerDiv.classList.remove('timer-warning');
+                    }
+
+                    renderStudentQuestion(question);
+                    startStudentTimer(expiry);
+
+                    attachAnswerListener(question, async (answer) => {
+                        console.log('📝 Student answer:', answer);
+                        if (canAnswer && !hasAnsweredCurrent) {
+                            hasAnsweredCurrent = true;
+                            canAnswer = false;
+                            await submitAnswer(answer, question, qIdx, expiry);
+                        }
+                    });
+
+                }, (error) => {
+                    console.error('Question listener error:', error);
+                });
+
+                unsubScore = gameRef.collection('players').doc(myStudentId).onSnapshot((doc) => {
+                    if (doc.exists) {
+                        document.getElementById('scoreDisplay').innerText = doc.data()?.score || 0;
+                    }
+                });
+
+                showToast(`✅ Connected to game ${pin}!`, 'success');
+                setLoading(false);
+
+            } catch (err) {
+                errorEl.classList.remove('hidden');
+                errorEl.innerHTML = 'Failed to join: ' + err.message;
+                console.error(err);
+                setLoading(false);
+            }
+        };
+
+        // ==================== FIXED START GAME ====================
+        window.startGame = async function() {
+            if (!currentGameRef) return;
+            setLoading(true, '▶ Starting game...');
+            try {
+                await currentGameRef.update({ 
+                    status: 'active', 
+                    currentIndex: -1, 
+                    waitingForNext: true 
+                });
+                showToast('Game started!', 'success');
+                const nextBtn = document.getElementById('nextControl');
+                if (nextBtn) nextBtn.disabled = false;
+                const startBtn = document.getElementById('startGameControl');
+                if (startBtn) {
+                    startBtn.textContent = '✓ ACTIVE';
+                    startBtn.disabled = true;
+                }
+            } catch (err) {
+                showToast('Failed to start: ' + err.message, 'error');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        // ==================== FIXED END GAME ====================
+        window.endGame = async function() {
+            if (!currentGameRef) return;
+            setLoading(true, '⏹ Ending game...');
+            try {
+                await currentGameRef.update({ 
+                    status: 'ended',
+                    endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                showToast('Game ended successfully', 'success');
+                document.getElementById('startGameControl').disabled = true;
+                document.getElementById('nextControl').disabled = true;
+                document.getElementById('endControl').disabled = true;
+            } catch (err) {
+                showToast('Failed to end: ' + err.message, 'error');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        // ==================== FIXED SETLOADING FOR CONSISTENCY ====================
+        const originalSetLoading = window.setLoading;
+        window.setLoading = function(show, text = 'Loading...') {
+            const overlay = document.getElementById('loadingOverlay');
+            const loadingText = document.getElementById('loadingText');
+            if (show) {
+                loadingText.textContent = text;
+                overlay.classList.remove('hidden');
+                overlay.style.opacity = '1';
+                // Update title for visual feedback
+                document.title = `🔄 ${text}...`;
+                setTimeout(() => {
+                    if (document.title.includes('🔄')) {
+                        document.title = '🌐 SmartQuiz Live';
+                    }
+                }, 2000);
+            } else {
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 300);
+                document.title = '🌐 SmartQuiz Live';
+            }
+        };
+
+        console.log('✅ All fixes applied successfully!');
+    })();
+    </script>
+    
+    <!-- Button event listeners fix -->
+    <script>
+    // Re-attach event listeners after page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🎯 Re-attaching button listeners...');
+        
+        // Fix Host button
+        const hostBtn = document.getElementById('hostBtn');
+        if (hostBtn) {
+            hostBtn.onclick = function() {
+                showHost();
+            };
+        }
+        
+        // Fix Student Join button
+        const studentJoinBtn = document.getElementById('studentJoinBtn');
+        if (studentJoinBtn) {
+            studentJoinBtn.onclick = function() {
+                showStudent();
+            };
+        }
+        
+        // Fix Join Game button with loading
+        const joinBtn = document.getElementById('joinGameControl');
+        if (joinBtn) {
+            joinBtn.onclick = function() {
+                setLoading(true, '🔗 Connecting to game...');
+                if (window.joinGame) {
+                    window.joinGame();
+                }
+            };
+        }
+        
+        // Fix Next button with loading
+        const nextBtn = document.getElementById('nextControl');
+        if (nextBtn) {
+            nextBtn.onclick = function() {
+                setLoading(true, '🔄 Sending question to students...');
+                if (window.nextQuestion) {
+                    window.nextQuestion();
+                }
+            };
+        }
+        
+        // Fix Start button with loading
+        const startBtn = document.getElementById('startGameControl');
+        if (startBtn) {
+            startBtn.onclick = function() {
+                setLoading(true, '▶ Starting game...');
+                if (window.startGame) {
+                    window.startGame();
+                }
+            };
+        }
+        
+        // Fix End button with loading
+        const endBtn = document.getElementById('endControl');
+        if (endBtn) {
+            endBtn.onclick = function() {
+                setLoading(true, '⏹ Ending game...');
+                if (window.endGame) {
+                    window.endGame();
+                }
+            };
+        }
+        
+        // Fix Back buttons
+        const backHost = document.getElementById('backHostBtn');
+        if (backHost) backHost.onclick = backToLanding;
+        
+        const backStudent = document.getElementById('backStudentBtn');
+        if (backStudent) backStudent.onclick = backToLanding;
+        
+        const exitControl = document.getElementById('exitControl');
+        if (exitControl) exitControl.onclick = backToLanding;
+        
+        // Fix Question creation
+        const addQBtn = document.getElementById('addQBtn');
+        if (addQBtn) addQBtn.onclick = addQuestion;
+        
+        const sampleBtn = document.getElementById('sampleBtn');
+        if (sampleBtn) sampleBtn.onclick = addSamples;
+        
+        const clearBtn = document.getElementById('clearBtn');
+        if (clearBtn) clearBtn.onclick = clearQuestions;
+        
+        const qType = document.getElementById('qType');
+        if (qType) qType.onchange = renderQuestionForm;
+        
+        const createGameBtn = document.getElementById('createGameBtn');
+        if (createGameBtn) createGameBtn.onclick = createGame;
+        
+        // Enter key support
+        const studentName = document.getElementById('studentName');
+        if (studentName) {
+            studentName.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    setLoading(true, '🔗 Connecting to game...');
+                    if (window.joinGame) window.joinGame();
+                }
+            });
+        }
+        
+        const gamePinStudent = document.getElementById('gamePinStudent');
+        if (gamePinStudent) {
+            gamePinStudent.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    setLoading(true, '🔗 Connecting to game...');
+                    if (window.joinGame) window.joinGame();
+                }
+            });
+        }
+        
+        console.log('✅ All button listeners re-attached!');
+    });
+    </script>
 </body>
 </html>

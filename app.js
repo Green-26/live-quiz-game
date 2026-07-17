@@ -19,26 +19,38 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('qType').onchange = renderQuestionForm;
     document.getElementById('createGameBtn').onclick = createGame;
 
-    // Game controls
-    document.getElementById('startGameControl').onclick = startGame;
-    document.getElementById('nextControl').onclick = nextQuestion;
-    document.getElementById('endControl').onclick = endGame;
+    // Game controls with loading animations
+    document.getElementById('startGameControl').onclick = function() {
+        setLoading(true, '▶ Starting game...');
+        startGame();
+    };
+    
+    document.getElementById('nextControl').onclick = function() {
+        setLoading(true, '🔄 Sending question to students...');
+        nextQuestion();
+    };
+    
+    document.getElementById('endControl').onclick = function() {
+        setLoading(true, '⏹ Ending game...');
+        endGame();
+    };
 
-    // Student
+    // Student join with loading animation
     document.getElementById('joinGameControl').onclick = function() {
-        setLoading(true, 'Joining game...');
+        setLoading(true, '🔗 Connecting to game...');
         joinGame();
     };
 
+    // Enter key support with loading animation
     document.getElementById('studentName').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            setLoading(true, 'Joining game...');
+            setLoading(true, '🔗 Connecting to game...');
             joinGame();
         }
     });
     document.getElementById('gamePinStudent').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            setLoading(true, 'Joining game...');
+            setLoading(true, '🔗 Connecting to game...');
             joinGame();
         }
     });

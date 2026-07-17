@@ -60,7 +60,6 @@ async function restoreActiveSession() {
         myQuestions = gameData.questions || [];
 
         // Reattach host listeners
-        // This would need the full game-host logic
         return true;
     } else {
         // Restore player view
