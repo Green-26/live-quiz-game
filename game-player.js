@@ -1,9 +1,10 @@
-// ==================== GAME PLAYER MODULE - COMPLETE ====================
+// ==================== GAME PLAYER MODULE - ENHANCED ====================
 
 let myStudentId = null;
 let canAnswer = true;
 let hasAnsweredCurrent = false;
 let studentTimerInterval = null;
+let lastQuestionVersion = null; // Track version for sync detection
 
 async function joinGame() {
     const name = document.getElementById('studentName').value.trim();
@@ -25,7 +26,7 @@ async function joinGame() {
         return;
     }
 
-    setLoading(true, 'Joining game...');
+    setLoading(true, '🔗 Connecting to game...');
 
     try {
         const gameRef = db.collection('games').doc(pin);
@@ -84,7 +85,7 @@ async function joinGame() {
             }
         });
 
-        // Listen to active question with improved sync
+        // CRITICAL FIX: Listen to active question with enhanced sync detection
         unsubQuestion = gameRef.collection('activeQuestion').doc('current').onSnapshot((snap) => {
             console.log('📡 Question sync received:', snap.exists ? 'YES' : 'NO');
             
@@ -96,6 +97,7 @@ async function joinGame() {
                 if (qd) qd.innerHTML = '<div class="text-center" style="color: var(--text-secondary); padding: 40px;">⏳ Waiting for question...</div>';
                 if (timerDiv) timerDiv.innerText = '15';
                 if (fb) fb.innerHTML = '';
+                lastQuestionVersion = null;
                 return;
             }
 
@@ -108,6 +110,14 @@ async function joinGame() {
                 if (fb) fb.innerHTML = '';
                 return;
             }
+
+            // SYNC DETECTION: Check if this is a NEW question (version changed)
+            const currentVersion = questionData.version;
+            if (currentVersion === lastQuestionVersion) {
+                console.log('⚠️ Same question version, ignoring duplicate sync');
+                return;
+            }
+            lastQuestionVersion = currentVersion;
 
             // SYNC POINT: Question received immediately
             canAnswer = true;
@@ -151,7 +161,7 @@ async function joinGame() {
             }
         });
 
-        showToast(`Joined game ${pin}!`, 'success');
+        showToast(`✅ Connected to game ${pin}!`, 'success');
         setLoading(false);
 
     } catch (err) {
