@@ -84,9 +84,9 @@ async function joinGame() {
             }
         });
 
-        // Listen to active question
+        // Listen to active question with improved sync
         unsubQuestion = gameRef.collection('activeQuestion').doc('current').onSnapshot((snap) => {
-            console.log('Question snapshot:', snap.exists);
+            console.log('📡 Question sync received:', snap.exists ? 'YES' : 'NO');
             
             const qd = document.getElementById('questionDisplay');
             const fb = document.getElementById('feedback');
@@ -101,6 +101,7 @@ async function joinGame() {
 
             const questionData = snap.data();
 
+            // Check if question is still active
             if (!questionData.isActive) {
                 if (qd) qd.innerHTML = '<div class="text-center" style="color: var(--text-secondary); padding: 40px;">⏳ Getting next question ready...</div>';
                 if (timerDiv) timerDiv.innerText = '15';
@@ -108,6 +109,7 @@ async function joinGame() {
                 return;
             }
 
+            // SYNC POINT: Question received immediately
             canAnswer = true;
             hasAnsweredCurrent = false;
 
@@ -115,25 +117,31 @@ async function joinGame() {
             const expiry = questionData.expiresAt.toDate();
             const qIdx = questionData.index;
 
-            console.log('Rendering question:', question.text);
+            console.log('✅ Rendering question for student:', question.text);
 
+            // Clear feedback
             if (fb) fb.innerHTML = '';
             if (timerDiv) {
                 timerDiv.innerText = '15';
                 timerDiv.classList.remove('timer-warning');
             }
 
+            // Render question
             renderStudentQuestion(question);
             startStudentTimer(expiry);
 
+            // Attach answer listener
             attachAnswerListener(question, async (answer) => {
-                console.log('Answer:', answer);
+                console.log('📝 Student answer:', answer);
                 if (canAnswer && !hasAnsweredCurrent) {
                     hasAnsweredCurrent = true;
                     canAnswer = false;
                     await submitAnswer(answer, question, qIdx, expiry);
                 }
             });
+
+        }, (error) => {
+            console.error('Question listener error:', error);
         });
 
         // Listen to score updates

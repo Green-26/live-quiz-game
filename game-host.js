@@ -165,7 +165,9 @@ async function startGame() {
 
 async function nextQuestion() {
     if (!currentGameRef) return;
-    setLoading(true, 'Loading next question...');
+    
+    // Show loading with proper animation
+    setLoading(true, '🔄 Sending question to students...');
 
     try {
         const doc = await currentGameRef.get();
@@ -192,20 +194,27 @@ async function nextQuestion() {
             questionTimerInterval = null;
         }
 
-        // Update game with new question index
+        // Step 1: Update currentIndex in main game document
         await currentGameRef.update({
             currentIndex: nextIdx,
-            waitingForNext: false
+            waitingForNext: false,
+            questionSentAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        // Create active question document
+        // Step 2: Create/update activeQuestion document with sync flag for instant delivery
         const activeRef = currentGameRef.collection('activeQuestion').doc('current');
+        const questionData = data.questions[nextIdx];
+        const startTime = new Date();
+        const expiresAt = new Date(startTime.getTime() + 15000);
+
         await activeRef.set({
-            question: data.questions[nextIdx],
+            question: questionData,
             startedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 15000)),
+            expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
             isActive: true,
-            index: nextIdx
+            index: nextIdx,
+            syncFlag: Math.random(), // Force listener update
+            sentToStudents: true
         });
 
         currentQuestionIndex = nextIdx;
@@ -218,12 +227,28 @@ async function nextQuestion() {
         if (nextBtn) nextBtn.disabled = true;
         if (statusDiv) statusDiv.innerHTML = `📢 Question ${nextIdx+1}/${total} is LIVE! Waiting for answers...`;
 
+        // Display current question on teacher dashboard
+        const currentQDiv = document.getElementById('currentQDisplay');
+        if (currentQDiv) {
+            currentQDiv.innerHTML = `
+                <div style="margin-bottom: 8px;"><strong style="color: #ffd89b;">Question ${nextIdx+1}/${total}</strong></div>
+                <div style="font-size: 1.1rem; margin-bottom: 8px;">${escapeHtml(questionData.text)}</div>
+                <div style="color: var(--text-secondary); font-size: 0.9rem;">
+                    <span style="background: rgba(102,126,234,0.2); padding: 2px 10px; border-radius: 12px; border: 1px solid rgba(102,126,234,0.3);">${questionData.type.toUpperCase()}</span>
+                    <span style="margin-left: 10px;">🎯 ${questionData.points} pts | ${questionData.difficulty}</span>
+                </div>
+            `;
+        }
+
         // Auto-enable NEXT after 15 seconds
         questionTimerInterval = setTimeout(async () => {
             try {
                 const activeDoc = await currentGameRef.collection('activeQuestion').doc('current').get();
                 if (activeDoc.exists && activeDoc.data()?.isActive) {
-                    await activeRef.update({ isActive: false });
+                    await activeRef.update({ 
+                        isActive: false,
+                        stoppedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
                     await currentGameRef.update({ waitingForNext: true });
 
                     if (statusDiv) statusDiv.innerHTML = `⏰ Time's up for Question ${nextIdx+1}! Click NEXT to continue.`;
@@ -234,12 +259,15 @@ async function nextQuestion() {
                         nextBtn.disabled = !hasMore;
                     }
                 }
-            } catch (e) { console.error('Timer error:', e); }
+            } catch (e) { 
+                console.error('Timer error:', e); 
+            }
         }, 15000);
 
-        showToast(`Question ${nextIdx+1} sent!`, 'success');
+        showToast(`✅ Question ${nextIdx+1} sent to all students!`, 'success');
+
     } catch (err) {
-        showToast('Error: ' + err.message, 'error');
+        showToast('❌ Error: ' + err.message, 'error');
         console.error(err);
     } finally {
         setLoading(false);
