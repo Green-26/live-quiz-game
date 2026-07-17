@@ -1,4 +1,4 @@
-// ==================== GAME HOST MODULE - COMPLETE ====================
+// ==================== GAME HOST MODULE - ENHANCED ====================
 
 let currentQuestionIndex = -1;
 let totalQuestionsCount = 0;
@@ -7,7 +7,7 @@ let questionTimerInterval = null;
 async function createGame() {
     if (!myQuestions.length) { showToast('Add questions first!', 'error'); return; }
 
-    setLoading(true, 'Creating game...');
+    setLoading(true, '🚀 Creating game...');
 
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
     currentPin = pin;
@@ -147,7 +147,7 @@ async function createGame() {
 
 async function startGame() {
     if (!currentGameRef) return;
-    setLoading(true, 'Starting game...');
+    setLoading(true, '▶ Starting game...');
     try {
         await currentGameRef.update({ 
             status: 'active', 
@@ -207,6 +207,7 @@ async function nextQuestion() {
         const startTime = new Date();
         const expiresAt = new Date(startTime.getTime() + 15000);
 
+        // CRITICAL FIX: Use setDoc to force document creation/update with immediate sync
         await activeRef.set({
             question: questionData,
             startedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -214,8 +215,9 @@ async function nextQuestion() {
             isActive: true,
             index: nextIdx,
             syncFlag: Math.random(), // Force listener update
-            sentToStudents: true
-        });
+            sentToStudents: true,
+            version: Date.now() // Timestamp for sync detection
+        }, { merge: false }); // Force complete overwrite for sync
 
         currentQuestionIndex = nextIdx;
         const total = data.questions.length;
@@ -278,7 +280,7 @@ async function endGame() {
     if (!currentGameRef) return;
     if (!confirm('End the game? Students will see final results.')) return;
 
-    setLoading(true, 'Ending game...');
+    setLoading(true, '⏹ Ending game...');
     if (questionTimerInterval) {
         clearTimeout(questionTimerInterval);
         questionTimerInterval = null;
